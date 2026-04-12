@@ -15,101 +15,127 @@ import (
 	"google.golang.org/genai"
 )
 
-// ─────────────────────────────────────────────
-//  System Prompt Template (exact lecturer spec)
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  SYSTEM PROMPT TEMPLATE
+//  Exact text mandated by the lecturer. The placeholder string
+//  "[INJECT_FETCHED_FEEDBACK_ITEMS_HERE]" is replaced at runtime using
+//  strings.ReplaceAll so that the literal "100%" in the final paragraph
+//  is never misinterpreted as a fmt.Sprintf verb.
+// ─────────────────────────────────────────────────────────────────────────────
 
-// feedbackPlaceholder marks where feedback items will be injected.
-const feedbackPlaceholder = "[INSERT_FEEDBACK_ITEMS_HERE]"
+const feedbackPlaceholder = "[INJECT_FETCHED_FEEDBACK_ITEMS_HERE]"
 
-// systemPromptTemplate is the EXACT prompt mandated by the lecturer.
-// It uses a raw string literal to avoid any escape issues.
-// The single %%  below becomes a literal % in the final fmt.Sprintf output.
-const systemPromptTemplate = `Peran Utama Anda: Kamu adalah asisten pendukung dosen di sistem TierLog. Tugas utamamu bukan memberikan saran mandiri atau ide baru secara acak. Kamu berfungsi sebagai jembatan yang memperluas dan mengimplementasikan feedback yang telah diberikan oleh dosen kepada mahasiswa melalui transkrip bimbingan.
+const systemPromptTemplate = `Peran Utama Kamu adalah asisten pendukung dosen. Tugas utamamu bukan memberikan saran mandiri atau ide baru secara acak. Kamu berfungsi sebagai jembatan yang memperluas dan mengimplementasikan feedback yang telah diberikan oleh dosen kepada mahasiswa.
 
-Tahap Konsultasi: Kamu tidak diperbolehkan memberikan bantuan teknis atau saran materi jika belum ada feedback resmi dari dosen yang dilampirkan.
+Alur Kerja (Wajib Urut)
 
-Berikut adalah poin-poin feedback resmi dari dosen berdasarkan transkrip:
-%s
+Tahap Konsultasi: AI tidak diperbolehkan memberikan bantuan teknis atau saran materi sebelum mahasiswa memasukkan feedback resmi dari dosen.
 
-Batasan Tindakan (Wajib Dipatuhi):
-1. Generasi Persona: Setelah menerima feedback di atas, bentuklah 'Persona Ahli' yang spesifik. Misalnya, jika dosen meminta perbaikan pada metodologi, kamu berubah menjadi persona 'Pakar Metodologi Penelitian'.
-2. Bantuan Kerja Terbatas: Setelah persona terbentuk, kamu baru diperbolehkan membantu mahasiswa dengan tetap berpegang teguh pada batasan feedback dosen.
-3. Dilarang Memberi Saran Mandiri: Jangan memberikan instruksi yang bertentangan atau di luar lingkup feedback dosen tersebut.
-4. Fokus Kelanjutan: Fokusmu hanya melanjutkan, merinci, dan membantu eksekusi dari apa yang sudah dikomentari dosen.
-5. Verifikasi: Jika mahasiswa meminta bantuan di luar feedback transkrip yang ada, ingatkan mahasiswa untuk melakukan konsultasi ulang dengan dosen terlebih dahulu.
+Input Feedback: Berikut adalah poin-poin feedback resmi dari dosen yang harus dikerjakan mahasiswa:
+[INJECT_FETCHED_FEEDBACK_ITEMS_HERE]
 
-Tujuan Akhir: Membantu mahasiswa menyelesaikan tugas dengan hasil yang selaras 100%% dengan ekspektasi dan arahan dosen pembimbing.`
+Generasi Persona: Setelah menerima feedback tersebut, kamu harus membentuk 'Persona Ahli' yang spesifik sesuai dengan arahan dosen. Misalnya, jika dosen meminta perbaikan pada metodologi, kamu berubah menjadi persona 'Pakar Metodologi Penelitian'.
 
-// ─────────────────────────────────────────────
-//  Core Business Logic
-// ─────────────────────────────────────────────
+Bantuan Kerja: Setelah persona terbentuk, kamu baru diperbolehkan membantu mahasiswa mengerjakan tugasnya dengan tetap berpegang teguh pada batasan feedback dosen tersebut.
 
-// ProcessRevisionAssistance is the primary AI logic function.
+Batasan Tindakan
+
+Dilarang Memberi Saran Mandiri: Jangan memberikan instruksi yang bertentangan atau di luar lingkup feedback dosen.
+
+Fokus Kelanjutan: Fokusmu hanya melanjutkan, merinci, dan membantu eksekusi dari apa yang sudah dikomentari dosen.
+
+Verifikasi: Jika mahasiswa meminta bantuan di luar feedback yang ada, ingatkan mahasiswa untuk melakukan konsultasi ulang dengan dosen terlebih dahulu.
+
+Tujuan Akhir Membantu mahasiswa menyelesaikan tugas dengan hasil yang selaras 100% dengan ekspektasi dan arahan dosen pembimbing.`
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  CORE BUSINESS LOGIC
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GenerateRevisionAssistance is the primary AI logic function.
 //
 // Workflow:
-//  1. Fetch all FeedbackItems for the given log (derived from the transcript).
-//  2. Guard: if no feedback exists yet, refuse to answer (per lecturer rule).
-//  3. Build the formatted feedback list and inject into the system prompt.
-//  4. Call the Gemini API with the constructed system prompt + student query.
-//  5. Return the AI-generated response.
-func ProcessRevisionAssistance(logID uint, studentQuery string) (string, error) {
-	// Step 1: Fetch feedback items from DB for this consultation log
+//  1. Query the DB for all FeedbackItem records associated with logID.
+//  2. Guard: refuse to call the AI if no official feedback has been recorded
+//     yet (Tahap Konsultasi rule — lecturer's strict constraint).
+//  3. Format each FeedbackItem into a numbered bullet list.
+//  4. Inject the formatted list into the System Prompt by replacing the
+//     placeholder string.
+//  5. Call the Gemini API with the constructed System Instruction and the
+//     student's query as the user turn.
+//  6. Return the AI-generated response text.
+func GenerateRevisionAssistance(logID uint64, studentQuery string) (string, error) {
+
+	// ── Step 1: Fetch feedback items from DB ─────────────────────────────────
 	var feedbackItems []models.FeedbackItem
 	if err := koneksi.DB.Where("log_id = ?", logID).Find(&feedbackItems).Error; err != nil {
 		return "", fmt.Errorf("database error while fetching feedback: %w", err)
 	}
 
-	// Step 2: Guard — No feedback means no AI assistance (lecturer's strict rule)
+	// ── Step 2: Guard — enforce "Tahap Konsultasi" rule ─────────────────────
+	// The AI must NOT answer before official lecturer feedback is recorded.
 	if len(feedbackItems) == 0 {
 		return "", errors.New(
-			"GUARDED: Belum ada feedback resmi dari dosen untuk log ini. " +
-				"AI tidak dapat memberikan bantuan sebelum transkrip bimbingan diproses dan feedback diinputkan.",
+			"GUARDED: Belum ada feedback resmi dari dosen untuk sesi konsultasi ini. " +
+				"AI tidak dapat memberikan bantuan sebelum feedback dosen diinputkan ke dalam sistem.",
 		)
 	}
 
-	// Step 3: Build feedback bullet list to inject into the prompt
+	// ── Step 3: Format feedback items into a numbered bullet list ────────────
+	// Each item shows its sequential number, category, status, and content.
+	// Example:
+	//   1. [Major | Pending] Perbaiki strukturisasi Bab 2 metodologi penelitian.
+	//   2. [Minor | Fixed]   Tambahkan referensi pada paragraf pembuka.
 	var lines []string
 	for i, item := range feedbackItems {
-		status := string(item.Status)
-		category := string(item.Category)
 		lines = append(lines, fmt.Sprintf(
 			"%d. [%s | %s] %s",
-			i+1, category, status, item.Content,
+			i+1,
+			string(item.Category), // "Minor" or "Major"
+			string(item.Status),   // "Fixed" or "Pending"
+			item.Content,
 		))
 	}
 	formattedFeedback := strings.Join(lines, "\n")
 
-	// Step 4: Inject feedback into the system prompt template
-	// fmt.Sprintf replaces the single %s with the feedback list.
-	// The '100%%' in the template becomes '100%' after formatting.
-	finalSystemPrompt := fmt.Sprintf(systemPromptTemplate, formattedFeedback)
+	// ── Step 4: Inject feedback into the System Prompt ───────────────────────
+	// We use strings.ReplaceAll instead of fmt.Sprintf so that the literal
+	// "100%" in the Tujuan Akhir paragraph is never treated as a format verb.
+	finalSystemPrompt := strings.ReplaceAll(
+		systemPromptTemplate,
+		feedbackPlaceholder,
+		formattedFeedback,
+	)
 
-	// Step 5: Call Gemini API
+	// ── Step 5: Call the Gemini API ──────────────────────────────────────────
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
-		// Fallback for development: return the constructed prompt without calling the API.
-		// In production, ensure GEMINI_API_KEY is set in your environment.
-		devResult := fmt.Sprintf(
-			"[DEV MODE — No GEMINI_API_KEY set]\n\n[SYSTEM PROMPT]\n%s\n\n[STUDENT QUERY]\n%s",
+		// DEV MODE: no API key configured — return the assembled prompt so the
+		// developer can verify injection is correct without hitting the API.
+		devResponse := fmt.Sprintf(
+			"[DEV MODE — GEMINI_API_KEY is not set]\n\n"+
+				"[SYSTEM PROMPT INJECTED]\n%s\n\n"+
+				"[STUDENT QUERY]\n%s",
 			finalSystemPrompt,
 			studentQuery,
 		)
-		return devResult, nil
+		return devResponse, nil
 	}
 
 	ctx := context.Background()
 
-	// Initialize the Gemini client using the API key from the environment
+	// Initialise the Gemini client
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:  apiKey,
 		Backend: genai.BackendGeminiAPI,
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to create Gemini client: %w", err)
+		return "", fmt.Errorf("failed to initialise Gemini client: %w", err)
 	}
 
-	// Compose the full request: system instruction + user turn
+	// Build and send the request.
+	// The finalSystemPrompt is passed as a SystemInstruction so Gemini treats
+	// it as the authoritative constraint for the entire conversation.
 	result, err := client.Models.GenerateContent(
 		ctx,
 		"gemini-2.0-flash",
@@ -122,39 +148,58 @@ func ProcessRevisionAssistance(logID uint, studentQuery string) (string, error) 
 		return "", fmt.Errorf("Gemini API call failed: %w", err)
 	}
 
-	// Extract the text response using the SDK's built-in helper
+	// ── Step 6: Extract and return the response text ─────────────────────────
 	if result == nil || len(result.Candidates) == 0 {
-		return "", errors.New("Gemini returned an empty response")
+		return "", errors.New("Gemini returned an empty response — no candidates")
 	}
 
 	return result.Text(), nil
 }
 
-// ─────────────────────────────────────────────
-//  HTTP Handler
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  HTTP HANDLER
+// ─────────────────────────────────────────────────────────────────────────────
 
-// AIAssistHandler handles POST /api/ai/assist
+// AIAssistHandler godoc
 //
-// Request Body (JSON):
+//	@Summary      Ask AI for revision assistance
+//	@Description  Sends the student query to Gemini, guarded by lecturer feedback.
+//	              Returns 403 if no official feedback has been recorded yet.
+//	@Tags         AI
+//	@Accept       json
+//	@Produce      json
+//	@Param        body  body  object  true  "Request body"
+//	@Success      200   {object}  object
+//	@Failure      400   {object}  object
+//	@Failure      403   {object}  object
+//	@Failure      500   {object}  object
+//	@Router       /api/ai/assist [post]
 //
-//	{ "log_id": 1, "query": "Bagaimana cara memperbaiki bab 2?" }
+// POST /api/ai/assist
+//
+// Request body (JSON):
+//
+//	{
+//	  "log_id": 1,
+//	  "query":  "Bagaimana cara memperbaiki struktur Bab 2 saya?"
+//	}
 func AIAssistHandler(c *gin.Context) {
 	var req struct {
-		LogID uint   `json:"log_id" binding:"required"`
+		LogID uint64 `json:"log_id" binding:"required"`
 		Query string `json:"query"  binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Request tidak valid: log_id (angka) dan query (string) wajib diisi.",
+			"status":  "error",
+			"message": "Request tidak valid. Field 'log_id' (angka) dan 'query' (string) wajib diisi.",
 		})
 		return
 	}
 
-	response, err := ProcessRevisionAssistance(req.LogID, req.Query)
+	aiResponse, err := GenerateRevisionAssistance(req.LogID, req.Query)
 	if err != nil {
-		// Distinguish between guarded refusals and server errors
+		// Return 403 Forbidden for guarded refusals (no feedback recorded yet)
 		if strings.HasPrefix(err.Error(), "GUARDED:") {
 			c.JSON(http.StatusForbidden, gin.H{
 				"status":  "guarded",
@@ -162,14 +207,17 @@ func AIAssistHandler(c *gin.Context) {
 			})
 			return
 		}
+		// Return 500 for all other server / API errors
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "AI Processing error: " + err.Error(),
+			"status":  "error",
+			"message": "AI processing error: " + err.Error(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":      "success",
-		"ai_response": response,
+		"log_id":      req.LogID,
+		"ai_response": aiResponse,
 	})
 }
