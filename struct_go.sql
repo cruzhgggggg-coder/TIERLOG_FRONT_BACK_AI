@@ -45,6 +45,7 @@ CREATE TABLE `consultation_logs` (
   `user_id` bigint unsigned NOT NULL,
   `audio_filename` varchar(255) DEFAULT NULL,
   `transcript_filename` varchar(255) DEFAULT NULL,
+  `paper_filename` varchar(255) DEFAULT NULL,
   `created_at` datetime(3) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `fk_consultation_logs_user` (`user_id`),
@@ -76,5 +77,5 @@ INSERT INTO `students` (`id`, `user_id`, `lecturer_id`, `nim`, `name`, `prodi`, 
 (1, 2, 1, '2200010001', 'Budi Mahasiswa', 'Teknik Informatika', 'Implementasi Microservices pada Sistem Log Bimbingan');
 
 
-INSERT INTO `consultation_logs` (`id`, `user_id`, `audio_filename`, `transcript_filename`, `created_at`) VALUES
-(1, 2, '1772789873064118400_One Direction - Night Changes.mp3', '1772789873064118400_transcript.txt', '2026-03-06 16:37:53.081');
+INSERT INTO `consultation_logs` (`id`, `user_id`, `audio_filename`, `transcript_filename`, `paper_filename`, `created_at`) VALUES
+(1, 2, '1772789873064118400_One Direction - Night Changes.mp3', '1772789873064118400_transcript.txt', '', '2026-03-06 16:37:53.081');

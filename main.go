@@ -17,6 +17,7 @@ func init() {
 	folders := []string{
 		"storage/audio",
 		"storage/transcript",
+		"storage/paper",
 	}
 
 	for _, folder := range folders {

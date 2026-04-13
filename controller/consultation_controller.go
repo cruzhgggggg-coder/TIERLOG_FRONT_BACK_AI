@@ -39,6 +39,18 @@ func CreateConsultation(c *gin.Context) {
 		return
 	}
 
+	// Handle optional paper upload (.docx, .pdf, etc.)
+	paperFilename := ""
+	paperFile, err := c.FormFile("paper")
+	if err == nil {
+		paperFilename = fmt.Sprintf("%d_%s", timestamp, paperFile.Filename)
+		paperPath := filepath.Join("storage", "paper", paperFilename)
+		if err := c.SaveUploadedFile(paperFile, paperPath); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save paper file"})
+			return
+		}
+	}
+
 	// Create a .txt file in storage/transcript/ as a placeholder
 	transcriptFilename := fmt.Sprintf("%d_transcript.txt", timestamp)
 	transcriptPath := filepath.Join("storage", "transcript", transcriptFilename)
@@ -53,6 +65,7 @@ func CreateConsultation(c *gin.Context) {
 		UserID:             userID,
 		AudioFilename:      audioFilename,
 		TranscriptFilename: transcriptFilename,
+		PaperFilename:      paperFilename,
 	}
 
 	if err := koneksi.DB.Create(&log).Error; err != nil {

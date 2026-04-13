@@ -60,6 +60,7 @@ type ConsultationLog struct {
 	UserID             uint64         `gorm:"not null" json:"user_id"`
 	AudioFilename      string         `gorm:"type:varchar(255)" json:"audio_filename"`
 	TranscriptFilename string         `gorm:"type:varchar(255)" json:"transcript_filename"`
+	PaperFilename      string         `gorm:"type:varchar(255)" json:"paper_filename"`
 	CreatedAt          time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	User               User           `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"user,omitempty"`
 	FeedbackItems      []FeedbackItem `gorm:"foreignKey:LogID;constraint:OnDelete:CASCADE" json:"feedback_items"`
