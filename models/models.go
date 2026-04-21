@@ -35,7 +35,7 @@ type User struct {
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
-	
+
 	// Profiles
 	Student  *Student  `gorm:"foreignKey:UserID" json:"student,omitempty"`
 	Lecturer *Lecturer `gorm:"foreignKey:UserID" json:"lecturer,omitempty"`
@@ -44,7 +44,7 @@ type User struct {
 type Lecturer struct {
 	ID        uint64         `gorm:"primaryKey;autoIncrement" json:"id"`
 	UserID    uint64         `gorm:"not null" json:"user_id"`
-	NIP       string         `gorm:"unique;not null;type:varchar(20)" json:"nip"`
+	NIP       string         `gorm:"column:nip;unique;not null;type:varchar(20)" json:"nip"`
 	Name      string         `gorm:"not null;type:varchar(100)" json:"name"`
 	Faculty   string         `gorm:"type:varchar(100)" json:"faculty"`
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`

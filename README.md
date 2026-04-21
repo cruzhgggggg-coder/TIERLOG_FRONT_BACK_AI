@@ -114,7 +114,7 @@ Membuat akun pengguna baru (dosen atau mahasiswa).
 ```json
 {
   "data": {
-    "id": 2,
+    "id": 6,
     "email": "mhs1@university.ac.id",
     "role": "student",
     "created_at": "2026-04-15T08:30:00Z",
@@ -126,7 +126,7 @@ Membuat akun pengguna baru (dosen atau mahasiswa).
 
 **Screenshot Postman**:
 
-![POST /users — Membuat User Baru](screenshoot/postman_create_user.png)
+![POST /users — Membuat User Baru](screenshoot/PostUser.png)
 
 ---
 
@@ -160,7 +160,7 @@ Membuat profil dosen. **Wajib dilakukan setelah membuat User dengan `role: lectu
 **Contoh Request**:
 ```json
 {
-  "user_id": 1,
+  "user_id": 5,
   "nip": "198001012005011001",
   "name": "Dr. Arsitek Go, M.Kom",
   "faculty": "Informatika"
@@ -171,8 +171,8 @@ Membuat profil dosen. **Wajib dilakukan setelah membuat User dengan `role: lectu
 ```json
 {
   "data": {
-    "id": 1,
-    "user_id": 1,
+    "id": 4,
+    "user_id": 5,
     "nip": "198001012005011001",
     "name": "Dr. Arsitek Go, M.Kom",
     "faculty": "Informatika"
@@ -183,7 +183,7 @@ Membuat profil dosen. **Wajib dilakukan setelah membuat User dengan `role: lectu
 
 **Screenshot Postman**:
 
-![POST /lecturers — Membuat Profil Dosen](screenshoot/postman_create_lecturer.png)
+![POST /lecturers — Membuat Profil Dosen](screenshoot/PostLecturer.png)
 
 ---
 
@@ -218,8 +218,8 @@ Membuat profil mahasiswa dan menghubungkan ke dosen pembimbing.
 **Contoh Request**:
 ```json
 {
-  "user_id": 2,
-  "lecturer_id": 1,
+  "user_id": 6,
+  "lecturer_id": 4,
   "nim": "2200010001",
   "name": "Budi Mahasiswa",
   "prodi": "Teknik Informatika",
@@ -231,9 +231,9 @@ Membuat profil mahasiswa dan menghubungkan ke dosen pembimbing.
 ```json
 {
   "data": {
-    "id": 1,
-    "user_id": 2,
-    "lecturer_id": 1,
+    "id": 4,
+    "user_id": 6,
+    "lecturer_id": 4,
     "nim": "2200010001",
     "name": "Budi Mahasiswa",
     "prodi": "Teknik Informatika",
@@ -245,7 +245,7 @@ Membuat profil mahasiswa dan menghubungkan ke dosen pembimbing.
 
 **Screenshot Postman**:
 
-![POST /students — Membuat Profil Mahasiswa](screenshoot/postman_create_student.png)
+![POST /students — Membuat Profil Mahasiswa](screenshoot/PostStudent.png)
 
 ---
 
@@ -296,9 +296,9 @@ Membuat sesi bimbingan baru. Endpoint ini akan otomatis:
 }
 ```
 
-**Screenshot Postman**:
+**Screenshot Postman [belum buat API Key Gemini]**:
 
-![POST /api/consultation — Upload Sesi Bimbingan](screenshoot/postman_create_consultation.png)
+![POST /api/consultation — Upload Sesi Bimbingan](screenshoot/PostConsultation.png)
 
 ---
 
@@ -309,9 +309,9 @@ Mengambil semua log bimbingan beserta feedback items dan profil mahasiswa.
 - **Method**: `GET`
 - **Tidak memerlukan body**
 
-**Screenshot Postman**:
+**Screenshot Postman[kosong karena tidak ada data dari langkah sebelumnya]**:
 
-![GET /api/consultation — Daftar Log Bimbingan](screenshoot/postman_get_consultations.png)
+![GET /api/consultation — Daftar Log Bimbingan](screenshoot/GetConsultation.png)
 
 ---
 
@@ -355,11 +355,11 @@ Berinteraksi dengan AI Assistant. AI **hanya akan merespons** berdasarkan feedba
 }
 ```
 
-**Screenshot Postman — Respons 403 Guarded**:
+**Screenshot Postman**:
 
-![POST /api/ai/assist — 403 Guarded Response](screenshoot/postman_ai_guarded.png)
+![POST /api/ai/assist — 403 Guarded Response](screenshoot/PostAssist.png)
 
-> **Catatan**: Screenshot respons sukses (200) dapat diuji setelah tahap konsultasi berhasil dilakukan.
+> **Catatan**: Error karena Langkah sebelumnya gagal memasukkan data.
 
 ---
 
