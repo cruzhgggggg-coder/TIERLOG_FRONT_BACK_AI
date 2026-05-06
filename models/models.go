@@ -23,12 +23,14 @@ const (
 type FeedbackStatus string
 
 const (
-	StatusFixed   FeedbackStatus = "Fixed"
-	StatusPending FeedbackStatus = "Pending"
+	StatusFixed     FeedbackStatus = "Fixed"
+	StatusPending   FeedbackStatus = "Pending"
+	StatusValidated FeedbackStatus = "Validated"
 )
 
 type User struct {
 	ID        uint64         `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name      string         `gorm:"not null;type:varchar(255)" json:"name"`
 	Email     string         `gorm:"unique;not null;type:varchar(255)" json:"email"`
 	Password  string         `gorm:"not null;type:varchar(255)" json:"-"`
 	Role      UserRole       `gorm:"type:enum('student','lecturer');not null" json:"role"`
@@ -66,8 +68,8 @@ type Student struct {
 	UpdatedAt   time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
 
-	User     User     `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"user,omitempty"`
-	Lecturer Lecturer `gorm:"foreignKey:LecturerID;constraint:OnDelete:RESTRICT" json:"lecturer,omitempty"`
+	User     *User     `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"user,omitempty"`
+	Lecturer *Lecturer `gorm:"foreignKey:LecturerID;constraint:OnDelete:RESTRICT" json:"lecturer,omitempty"`
 }
 
 type ConsultationLog struct {
@@ -81,16 +83,16 @@ type ConsultationLog struct {
 	UpdatedAt          time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt          gorm.DeletedAt `gorm:"index" json:"-"`
 
-	Student       Student        `gorm:"foreignKey:StudentID;constraint:OnDelete:CASCADE" json:"student,omitempty"`
-	FeedbackItems []FeedbackItem `gorm:"foreignKey:LogID;constraint:OnDelete:CASCADE" json:"feedback_items"`
+	Student       *Student       `gorm:"foreignKey:StudentID;constraint:OnDelete:CASCADE" json:"student,omitempty"`
+	FeedbackItems []FeedbackItem `gorm:"foreignKey:ConsultationLogID;constraint:OnDelete:CASCADE" json:"feedback_items"`
 }
 
 type FeedbackItem struct {
-	ID        uint64           `gorm:"primaryKey;autoIncrement" json:"id"`
-	LogID     uint64           `gorm:"not null" json:"log_id"`
+	ID                 uint64           `gorm:"primaryKey;autoIncrement" json:"id"`
+	ConsultationLogID uint64           `gorm:"column:consultation_log_id;not null" json:"log_id"`
 	Content   string           `gorm:"type:text;not null" json:"content"`
 	Category  FeedbackCategory `gorm:"type:enum('Minor','Major');not null" json:"category"`
-	Status    FeedbackStatus   `gorm:"type:enum('Fixed','Pending');not null;default:'Pending'" json:"status"`
+	Status    FeedbackStatus   `gorm:"type:enum('Fixed','Pending','Validated');not null;default:'Pending'" json:"status"`
 	CreatedAt time.Time        `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time        `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt gorm.DeletedAt   `gorm:"index" json:"-"`

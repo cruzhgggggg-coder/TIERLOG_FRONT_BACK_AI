@@ -2,14 +2,13 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"os"
-	"path/filepath"
 
 	"testing_go/controller"
 	"testing_go/koneksi"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func init() {
@@ -29,8 +28,14 @@ func init() {
 }
 
 func main() {
+	// Load environment variables from Laravel's .env file
+	godotenv.Load("tierlog_v2/.env")
+
 	// Initialize Database (GORM with MySQL)
 	koneksi.ConnectDatabase()
+
+	// Initialize AI Provider Mode
+	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.Default()
 	r.SetTrustedProxies(nil)
@@ -57,7 +62,11 @@ func main() {
 	{
 		api.POST("/consultation", controller.CreateConsultation)
 		api.GET("/consultation", controller.GetConsultations)
+		api.GET("/stats", controller.GetStats)
 		api.POST("/ai/assist", controller.AIAssistHandler)
+		api.PUT("/feedback/:id/status", controller.UpdateFeedbackStatus)
+		api.GET("/lecturer/:id/consultations", controller.GetLecturerConsultations)
+		api.GET("/lecturer/:id/students", controller.GetLecturerStudents)
 	}
 
 	// Identity Management
@@ -68,28 +77,6 @@ func main() {
 	r.GET("/students", controller.GetStudents)
 	r.POST("/students", controller.CreateStudent)
 
-	// --- SERVE FRONTEND ---
-	distPath := "./dist"
-	
-	// Serve assets
-	r.Static("/assets", distPath+"/assets")
-	
-	// Serve root static files (favicon, etc)
-	r.StaticFile("/", distPath+"/index.html")
-	r.StaticFile("/favicon.svg", distPath+"/favicon.svg")
-	r.StaticFile("/icons.svg", distPath+"/icons.svg")
-
-	// SPA Routing: all other routes serve index.html
-	r.NoRoute(func(c *gin.Context) {
-		// Check if the request is for a file (e.g., .js, .css)
-		path := c.Request.URL.Path
-		if filepath.Ext(path) != "" {
-			c.Status(http.StatusNotFound)
-			return
-		}
-		c.File(distPath + "/index.html")
-	})
-
-	fmt.Println("TierLog Integrated System is running at http://localhost:8080")
+	fmt.Println("TierLog API Backend is running at http://localhost:8080")
 	r.Run(":8080")
 }

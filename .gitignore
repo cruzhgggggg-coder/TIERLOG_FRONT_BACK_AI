@@ -1,4 +1,4 @@
-# Binaries
+# Binaries & OS
 *.exe
 *.exe~
 *.dll
@@ -6,8 +6,33 @@
 *.dylib
 bin/
 main
+.DS_Store
+Thumbs.db
 
-# Storage
+# Environment Files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Go Specific
+vendor/
+go.sum.tmp
+
+# Laravel Specific (tierlog_v2)
+tierlog_v2/node_modules/
+tierlog_v2/vendor/
+tierlog_v2/public/storage
+tierlog_v2/public/build
+tierlog_v2/storage/*.key
+tierlog_v2/.phpunit.result.cache
+tierlog_v2/npm-debug.log*
+tierlog_v2/yarn-debug.log*
+tierlog_v2/yarn-error.log*
+tierlog_v2/.pnpm-debug.log*
+
+# Local Storage/Uploads
 storage/audio/*
 storage/transcript/*
 storage/feedback/*
@@ -17,6 +42,7 @@ storage/paper/*
 !storage/feedback/.gitkeep
 !storage/paper/.gitkeep
 
-# OS
-.DS_Store
-Thumbs.db
+# Scratch/Temporary
+scratch/
+agent.md
+query

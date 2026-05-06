@@ -1,13 +1,18 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"testing_go/koneksi"
 	"testing_go/models"
@@ -34,15 +39,13 @@ KATEGORI FEEDBACK:
 - LOC (Lower Order Concerns): Fokus pada teknis seperti penulisan, typo, format sitasi, dan tata bahasa.
 
 TATA CARA OUTPUT:
-Kamu WAJIB mengembalikan output hanya dalam format JSON Array tanpa teks tambahan.
-Contoh format:
-[
-  {"content": "Revisi bagian metodologi agar lebih detail sesuai arahan menit ke-5", "category": "HOC"},
-  {"content": "Perbaiki typo pada halaman 2", "category": "LOC"}
-]`
-
-const feedbackPlaceholder = "[INJECT_FETCHED_FEEDBACK_ITEMS_HERE]"
-const transcriptPlaceholder = "[INJECT_ORIGINAL_TRANSCRIPT_HERE]"
+Kamu WAJIB mengembalikan output dalam format JSON dengan struktur:
+{
+  "feedbacks": [
+    {"content": "...", "category": "HOC"},
+    {"content": "...", "category": "LOC"}
+  ]
+}`
 
 const systemPromptTemplate = `Peran Utama Kamu adalah asisten pendukung dosen. Tugas utamamu bukan memberikan saran mandiri atau ide baru secara acak. Kamu berfungsi sebagai jembatan yang memperluas dan mengimplementasikan feedback yang telah diberikan oleh dosen kepada mahasiswa.
 
@@ -59,67 +62,274 @@ BATASAN:
 - Dilarang memberi saran yang bertentangan dengan feedback dosen.
 - Jika mahasiswa meminta bantuan di luar cakupan feedback, ingatkan mereka untuk konsultasi lagi dengan dosen.`
 
+const feedbackPlaceholder = "[INJECT_FETCHED_FEEDBACK_ITEMS_HERE]"
+const transcriptPlaceholder = "[INJECT_ORIGINAL_TRANSCRIPT_HERE]"
+
 // ─────────────────────────────────────────────────────────────────────────────
-//  GEMINI API LOGIC: REVISION EXTRACTION
+//  GROQ API LOGIC (AUDIO TO TEXT)
 // ─────────────────────────────────────────────────────────────────────────────
 
-type FeedbackResponse struct {
-	Content  string `json:"content"`
-	Category string `json:"category"` // HOC or LOC
+func transcribeAudio(audioPath string) (string, error) {
+	apiKey := os.Getenv("GROQ_API_KEY")
+	if apiKey == "" {
+		return "", errors.New("GROQ_API_KEY is not set in .env")
+	}
+
+	file, err := os.Open(audioPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open audio file: %v", err)
+	}
+	defer file.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	
+	part, err := writer.CreateFormFile("file", filepath.Base(audioPath))
+	if err != nil {
+		return "", err
+	}
+	if _, err := io.Copy(part, file); err != nil {
+		return "", err
+	}
+	
+	writer.WriteField("model", "whisper-large-v3")
+	writer.WriteField("response_format", "text")
+	writer.WriteField("language", "id") // Assuming Indonesian
+	writer.Close()
+
+	req, err := http.NewRequest("POST", "https://api.groq.com/openai/v1/audio/transcriptions", body)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("Groq API error (%d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return string(respBody), nil
 }
 
-func ProcessRevisionAssistance(transcript, paper string) ([]models.FeedbackItem, error) {
+// ─────────────────────────────────────────────────────────────────────────────
+//  NVIDIA NIM API LOGIC
+// ─────────────────────────────────────────────────────────────────────────────
+
+type NVIDIARequest struct {
+	Model          string          `json:"model"`
+	Messages       []NVIDIAMessage `json:"messages"`
+	ResponseFormat *struct {
+		Type string `json:"type"`
+	} `json:"response_format,omitempty"`
+}
+
+type NVIDIAMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type NVIDIAResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+}
+
+func callNVIDIA(systemPrompt, userPrompt string, isJSON bool) (string, error) {
+	apiKey := os.Getenv("NVIDIA_API_KEY")
+	if apiKey == "" {
+		return "", errors.New("NVIDIA_API_KEY is not set")
+	}
+
+	fmt.Printf("\033[34m[NVIDIA NIM] Initiating request (Model: meta/llama-3.1-70b-instruct)...\033[0m\n")
+
+	url := "https://integrate.api.nvidia.com/v1/chat/completions"
+	
+	reqBody := NVIDIARequest{
+		Model: "meta/llama-3.1-70b-instruct",
+		Messages: []NVIDIAMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		},
+	}
+	
+	if isJSON {
+		reqBody.ResponseFormat = &struct {
+			Type string `json:"type"`
+		}{Type: "json_object"}
+	}
+
+	jsonData, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("\033[31m[NVIDIA NIM] Request Failed: %v\033[0m\n", err)
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	fmt.Printf("\033[32m[NVIDIA NIM] Response Received! Status: %d, Size: %d bytes\033[0m\n", resp.StatusCode, len(body))
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("NVIDIA API error (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var nvidiaResp NVIDIAResponse
+	if err := json.Unmarshal(body, &nvidiaResp); err != nil {
+		return "", err
+	}
+
+	if len(nvidiaResp.Choices) == 0 {
+		return "", errors.New("NVIDIA returned no choices")
+	}
+
+	return nvidiaResp.Choices[0].Message.Content, nil
+}
+
+func callGemini(systemPrompt, userPrompt string, isJSON bool) (string, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
-		return nil, errors.New("GEMINI_API_KEY is not set")
+		return "", errors.New("GEMINI_API_KEY is not set")
 	}
+
+	fmt.Printf("\033[35m[GEMINI AI] Initiating request (Model: gemini-2.0-flash)...\033[0m\n")
 
 	ctx := context.Background()
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialise Gemini client: %w", err)
+		fmt.Printf("\033[31m[GEMINI AI] Failed to create client: %v\033[0m\n", err)
+		return "", fmt.Errorf("failed to create Gemini client: %v", err)
 	}
 
-	userInput := fmt.Sprintf("=== TRANSKRIP BIMBINGAN (INSTRUKSI) ===\n%s\n\n=== DRAFT PAPER MAHASISWA ===\n%s", transcript, paper)
-
-	result, err := client.Models.GenerateContent(
-		ctx,
-		"gemini-2.0-flash",
-		genai.Text(userInput),
-		&genai.GenerateContentConfig{
-			SystemInstruction: genai.NewContentFromText(personaDosenPrompt, genai.RoleUser),
-			ResponseMIMEType:  "application/json",
+	config := &genai.GenerateContentConfig{
+		SystemInstruction: &genai.Content{
+			Parts: []*genai.Part{{Text: systemPrompt}},
 		},
-	)
+	}
+
+	if isJSON {
+		config.ResponseMIMEType = "application/json"
+	}
+
+	// Use a single Content struct with a single Part
+	content := &genai.Content{
+		Parts: []*genai.Part{{Text: userPrompt}},
+	}
+
+	resp, err := client.Models.GenerateContent(ctx, "gemini-2.0-flash", []*genai.Content{content}, config)
 	if err != nil {
-		return nil, fmt.Errorf("Gemini API call failed: %w", err)
-	}
-
-	if result == nil || len(result.Candidates) == 0 {
-		return nil, errors.New("Gemini returned an empty response")
-	}
-
-	var aiFeedbacks []FeedbackResponse
-	if err := json.Unmarshal([]byte(result.Text()), &aiFeedbacks); err != nil {
-		raw := result.Text()
-		start := strings.Index(raw, "[")
-		end := strings.LastIndex(raw, "]")
-		if start != -1 && end != -1 && end > start {
-			if err := json.Unmarshal([]byte(raw[start:end+1]), &aiFeedbacks); err != nil {
-				return nil, fmt.Errorf("failed to parse AI response as JSON: %w", err)
-			}
-		} else {
-			return nil, fmt.Errorf("failed to parse AI response as JSON: %w", err)
+		// Second attempt with simplified configuration if MIME type causes issues
+		if isJSON {
+			config.ResponseMIMEType = ""
+			resp, err = client.Models.GenerateContent(ctx, "gemini-2.0-flash", []*genai.Content{content}, config)
+		}
+		
+		if err != nil {
+			fmt.Printf("\033[31m[GEMINI AI] Request Failed: %v\033[0m\n", err)
+			return "", fmt.Errorf("Gemini API error: %v", err)
 		}
 	}
 
+	fmt.Printf("\033[32m[GEMINI AI] Response Received! Candidates: %d\033[0m\n", len(resp.Candidates))
+
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		return "", errors.New("Gemini returned no content")
+	}
+
+	return resp.Candidates[0].Content.Parts[0].Text, nil
+}
+
+func callAI(systemPrompt, userPrompt string, isJSON bool) (string, error) {
+	provider := strings.ToLower(os.Getenv("AI_PROVIDER"))
+	if provider == "gemini" {
+		return callGemini(systemPrompt, userPrompt, isJSON)
+	}
+	// Default to NVIDIA for backward compatibility or if set explicitly
+	return callNVIDIA(systemPrompt, userPrompt, isJSON)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ANALYSIS LOGIC (GROQ + NVIDIA)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type FeedbackResponse struct {
+	Content  string `json:"content"`
+	Category string `json:"category"`
+}
+
+func AnalyzeAudioAndPaper(audioPath, paperText, prevFeedback string) ([]models.FeedbackItem, string, error) {
+	// 1. Convert Audio to Text using Groq Whisper
+	transcript, err := transcribeAudio(audioPath)
+	if err != nil {
+		// Log the error but continue to try analyzing just the paper if possible
+		fmt.Printf("Warning: Transcription failed: %v\n", err)
+		transcript = "Transkripsi Audio Gagal: " + err.Error()
+	}
+
+	// 2. Analyze the Transcript and Paper with AI
+	systemPrompt := personaDosenPrompt
+	
+	consistencyContext := ""
+	if prevFeedback != "" {
+		consistencyContext = fmt.Sprintf("\n\nKONTEKS REVISI (Feedback Sesi Sebelumnya):\n%s\n\nTugas tambahanmu: Cek apakah mahasiswa sudah memperbaiki poin-poin di atas dalam draf baru ini. Jika belum, sertakan kembali dalam daftar feedback.", prevFeedback)
+	}
+
+	userPrompt := fmt.Sprintf("Berikut adalah transkrip audio bimbingan dosen:\n\"%s\"\n\nDan ini adalah paper mahasiswa:\n\n%s%s\n\nBerikan analisis revisi (HOC/LOC) berdasarkan transkrip tersebut.", transcript, paperText, consistencyContext)
+
+	rawResponse, err := callAI(systemPrompt, userPrompt, true)
+	if err != nil {
+		return nil, transcript, err
+	}
+
+	// Clean up markdown code blocks if present
+	cleanJSON := strings.TrimSpace(rawResponse)
+	if strings.HasPrefix(cleanJSON, "```json") {
+		cleanJSON = strings.TrimPrefix(cleanJSON, "```json")
+		cleanJSON = strings.TrimSuffix(cleanJSON, "```")
+	} else if strings.HasPrefix(cleanJSON, "```") {
+		cleanJSON = strings.TrimPrefix(cleanJSON, "```")
+		cleanJSON = strings.TrimSuffix(cleanJSON, "```")
+	}
+	cleanJSON = strings.TrimSpace(cleanJSON)
+
+	var aiResponse struct {
+		Feedbacks []FeedbackResponse `json:"feedbacks"`
+	}
+
+	if err := json.Unmarshal([]byte(cleanJSON), &aiResponse); err != nil {
+		// Fallback: search for { ... } in case of extra text
+		start := strings.Index(cleanJSON, "{")
+		end := strings.LastIndex(cleanJSON, "}")
+		if start != -1 && end != -1 && end > start {
+			if err2 := json.Unmarshal([]byte(cleanJSON[start:end+1]), &aiResponse); err2 == nil {
+				goto PROCESS
+			}
+		}
+		return nil, transcript, fmt.Errorf("failed to parse AI response: %w. Raw: %s", err, rawResponse)
+	}
+
+PROCESS:
 	var items []models.FeedbackItem
-	for _, f := range aiFeedbacks {
+	for _, f := range aiResponse.Feedbacks {
 		category := models.CategoryMinor
-		if strings.ToUpper(f.Category) == "HOC" {
+		catUpper := strings.ToUpper(f.Category)
+		if catUpper == "HOC" || catUpper == "MAJOR" {
 			category = models.CategoryMajor
 		}
 		items = append(items, models.FeedbackItem{
@@ -129,11 +339,11 @@ func ProcessRevisionAssistance(transcript, paper string) ([]models.FeedbackItem,
 		})
 	}
 
-	return items, nil
+	return items, transcript, nil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  GEMINI API LOGIC: CONVERSATIONAL ASSISTANCE
+//  CONVERSATIONAL ASSISTANCE
 // ─────────────────────────────────────────────────────────────────────────────
 
 func GenerateRevisionAssistance(logID uint64, studentQuery string) (string, error) {
@@ -143,47 +353,19 @@ func GenerateRevisionAssistance(logID uint64, studentQuery string) (string, erro
 	}
 
 	if len(log.FeedbackItems) == 0 {
-		return "", errors.New("GUARDED: Belum ada feedback resmi. Selesaikan proses bimbingan terlebih dahulu.")
+		return "", errors.New("GUARDED: Belum ada feedback resmi.")
 	}
 
-	// Format feedback summary
 	var feedbackLines []string
 	for i, item := range log.FeedbackItems {
 		feedbackLines = append(feedbackLines, fmt.Sprintf("%d. [%s] %s", i+1, item.Category, item.Content))
 	}
 	formattedFeedback := strings.Join(feedbackLines, "\n")
 
-	// Prepare final prompt with extracted items AND original transcript text
 	finalSystemPrompt := strings.ReplaceAll(systemPromptTemplate, feedbackPlaceholder, formattedFeedback)
 	finalSystemPrompt = strings.ReplaceAll(finalSystemPrompt, transcriptPlaceholder, log.TranscriptText)
 
-	apiKey := os.Getenv("GEMINI_API_KEY")
-	if apiKey == "" {
-		return "[DEV MODE — API KEY NOT SET] Prompt:\n" + finalSystemPrompt, nil
-	}
-
-	ctx := context.Background()
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return "", err
-	}
-
-	result, err := client.Models.GenerateContent(
-		ctx,
-		"gemini-2.0-flash",
-		genai.Text(studentQuery),
-		&genai.GenerateContentConfig{
-			SystemInstruction: genai.NewContentFromText(finalSystemPrompt, genai.RoleUser),
-		},
-	)
-	if err != nil {
-		return "", err
-	}
-
-	return result.Text(), nil
+	return callAI(finalSystemPrompt, studentQuery, false)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
