@@ -134,7 +134,7 @@ const stats = computed(() => {
                         <!-- ... rest of consultation item ... -->
                         <div class="flex justify-between items-start mb-2">
                             <div class="flex items-center gap-3">
-                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center font-black text-xs text-white">
+                                <div class="w-10 h-10 rounded-full bg-linear-to-br from-indigo-500 to-purple-500 flex items-center justify-center font-black text-xs text-white">
                                     {{ log.student.name.charAt(0) }}
                                 </div>
                                 <div>

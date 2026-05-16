@@ -41,6 +41,24 @@ type User struct {
 	// Profiles
 	Student  *Student  `gorm:"foreignKey:UserID" json:"student,omitempty"`
 	Lecturer *Lecturer `gorm:"foreignKey:UserID" json:"lecturer,omitempty"`
+
+	// AI Gateway Fields
+	OpenAIKey       string `gorm:"type:varchar(255)" json:"openai_key"`
+	GeminiKey       string `gorm:"type:varchar(255)" json:"gemini_key"`
+	AnthropicKey    string `gorm:"type:varchar(255)" json:"anthropic_key"`
+	NvidiaKey       string `gorm:"type:varchar(255)" json:"nvidia_key"`
+	PreferredModel  string `gorm:"type:varchar(50);default:'default'" json:"preferred_model"`
+	IsGatewayActive bool   `gorm:"default:false" json:"is_gateway_active"`
+}
+
+type RedeemCode struct {
+	ID        uint64         `gorm:"primaryKey;autoIncrement" json:"id"`
+	Code      string         `gorm:"unique;not null;type:varchar(50)" json:"code"`
+	IsUsed    bool           `gorm:"default:false" json:"is_used"`
+	UsedBy    *uint64        `json:"used_by"`
+	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 type Lecturer struct {

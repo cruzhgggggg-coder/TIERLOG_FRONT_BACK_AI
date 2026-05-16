@@ -64,9 +64,15 @@ func main() {
 		api.GET("/consultation", controller.GetConsultations)
 		api.GET("/stats", controller.GetStats)
 		api.POST("/ai/assist", controller.AIAssistHandler)
+		api.GET("/ai/models", controller.GetAIModels)
 		api.PUT("/feedback/:id/status", controller.UpdateFeedbackStatus)
 		api.GET("/lecturer/:id/consultations", controller.GetLecturerConsultations)
 		api.GET("/lecturer/:id/students", controller.GetLecturerStudents)
+
+		// AI Gateway Settings
+		api.POST("/settings/ai-keys", controller.UpdateAIGatewaySettings)
+		api.POST("/settings/redeem", controller.RedeemGatewayCode)
+		api.POST("/admin/generate-code", controller.GenerateRedeemCode)
 	}
 
 	// Identity Management

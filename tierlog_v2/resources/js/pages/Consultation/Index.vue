@@ -77,6 +77,67 @@ const chatQuery = ref('');
 const chatResponse = ref('');
 const isChatting = ref(false);
 const chatHistory = ref([]);
+const selectedAIModel = ref('');
+
+const availableModels = computed(() => {
+    const models = [];
+    
+    if (props.auth.user.openai_key) {
+        models.push({ id: 'openai:gpt-4o', name: 'OpenAI: GPT-4o' });
+        models.push({ id: 'openai:gpt-4o-mini', name: 'OpenAI: GPT-4o Mini' });
+        models.push({ id: 'openai:o1-preview', name: 'OpenAI: o1 Preview' });
+        models.push({ id: 'openai:o1-mini', name: 'OpenAI: o1 Mini' });
+    }
+    
+    if (props.auth.user.gemini_key) {
+        models.push({ id: 'gemini:gemini-2.0-flash', name: 'Gemini: 2.0 Flash' });
+        models.push({ id: 'gemini:gemini-1.5-pro', name: 'Gemini: 1.5 Pro' });
+        models.push({ id: 'gemini:gemini-1.5-flash', name: 'Gemini: 1.5 Flash' });
+    }
+    
+    if (props.auth.user.anthropic_key) {
+        models.push({ id: 'anthropic:claude-3-5-sonnet-20240620', name: 'Claude: 3.5 Sonnet' });
+        models.push({ id: 'anthropic:claude-3-opus-20240229', name: 'Claude: 3 Opus' });
+        models.push({ id: 'anthropic:claude-3-haiku-20240307', name: 'Claude: 3 Haiku' });
+    }
+    
+    if (props.auth.user.nvidia_key) {
+        if (dynamicNvidiaModels.value.length > 0) {
+            dynamicNvidiaModels.value.forEach(m => {
+                models.push({ id: `nvidia:${m}`, name: `NVIDIA: ${m}` });
+            });
+        } else {
+            models.push({ id: 'nvidia:meta/llama-3.1-70b-instruct', name: 'NVIDIA: Llama 3.1 70B' });
+            models.push({ id: 'nvidia:meta/llama-3.1-8b-instruct', name: 'NVIDIA: Llama 3.1 8B' });
+            models.push({ id: 'nvidia:meta/llama-3.1-405b-instruct', name: 'NVIDIA: Llama 3.1 405B' });
+            models.push({ id: 'nvidia:bytedance/seed-oss-36b-instruct', name: 'NVIDIA: Seed OSS 36B' });
+        }
+    }
+
+    if (models.length === 0) {
+        models.push({ id: 'none', name: 'No AI Models Connected' });
+    }
+    
+    return models;
+});
+
+const dynamicNvidiaModels = ref([]);
+
+onMounted(() => {
+    if (props.auth.user.nvidia_key) {
+        axios.get(`http://localhost:8080/api/ai/models?provider=nvidia&api_key=${props.auth.user.nvidia_key}`)
+            .then(res => {
+                if (res.data && res.data.models) {
+                    dynamicNvidiaModels.value = res.data.models;
+                }
+            })
+            .catch(err => console.error('Failed to fetch dynamic NVIDIA models', err));
+    }
+
+    if (availableModels.value.length > 0) {
+        selectedAIModel.value = availableModels.value[0].id;
+    }
+});
 
 const askAI = async () => {
     if (!selectedLog.value || !chatQuery.value) return;
@@ -90,6 +151,7 @@ const askAI = async () => {
         const response = await axios.post('/consultation/chat', {
             log_id: selectedLog.value.id,
             query: userMessage,
+            model: selectedAIModel.value,
         });
         chatHistory.value.push({ 
             role: 'ai', 
@@ -464,14 +526,28 @@ watch(chatHistory, () => {
 
                             <!-- Input Area -->
                             <div class="p-8 bg-white/2 border-t border-white/5">
-                                <div class="relative flex items-center group">
-                                    <input 
-                                        v-model="chatQuery"
-                                        @keyup.enter="askAI"
-                                        type="text" 
-                                        placeholder="Communicate with Oracle..."
-                                        class="w-full bg-black/50 border border-white/5 rounded-2xl px-6 py-5 text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 outline-none transition-all pr-20 placeholder:text-slate-600 font-medium"
-                                    />
+                                <div class="flex flex-col gap-4">
+                                    <!-- Model Selector -->
+                                    <div class="flex items-center gap-3">
+                                        <select 
+                                            v-model="selectedAIModel"
+                                            class="bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 outline-none hover:border-indigo-500/50 transition-all cursor-pointer"
+                                        >
+                                            <option v-for="m in availableModels" :key="m.id" :value="m.id" class="bg-zinc-900 text-slate-300">
+                                                {{ m.name }}
+                                            </option>
+                                        </select>
+                                        <div class="h-px flex-1 bg-white/5"></div>
+                                    </div>
+
+                                    <div class="relative flex items-center group">
+                                        <input 
+                                            v-model="chatQuery"
+                                            @keyup.enter="askAI"
+                                            type="text" 
+                                            placeholder="Communicate with Oracle..."
+                                            class="w-full bg-black/50 border border-white/5 rounded-2xl px-6 py-5 text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 outline-none transition-all pr-20 placeholder:text-slate-600 font-medium"
+                                        />
                                     <button 
                                         @click="askAI"
                                         :disabled="isChatting || !chatQuery"
@@ -482,6 +558,7 @@ watch(chatHistory, () => {
                                 </div>
                                 <p class="text-[8px] text-center text-slate-600 mt-4 uppercase tracking-[0.3em] font-black">Encrypted Neural Link :: TierLog Sovereign AI</p>
                             </div>
+                        </div>
                         </div>
                         <div v-else class="flex-1 flex flex-col items-center justify-center bg-indigo-600/2 border border-dashed border-indigo-500/5 rounded-4xl opacity-20 transition-all hover:opacity-40">
                             <div class="relative w-20 h-20 mb-8">

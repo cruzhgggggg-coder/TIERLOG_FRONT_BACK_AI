@@ -120,6 +120,7 @@ class ConsultationController extends Controller
         $response = Http::timeout(120)->post("{$this->goBackendUrl}/api/ai/assist", [
             'log_id' => (int) $request->log_id,
             'query' => $request->input('query'),
+            'model' => $request->input('model'),
         ]);
 
         if ($response->successful()) {

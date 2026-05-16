@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
+use App\Http\Controllers\Settings\AIGatewayController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth'])->group(function () {
@@ -21,4 +22,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('user-password.update');
 
     Route::inertia('settings/appearance', 'settings/Appearance')->name('appearance.edit');
+
+    Route::get('settings/ai-gateway', [AIGatewayController::class, 'edit'])->name('ai-gateway.edit');
+    Route::patch('settings/ai-gateway', [AIGatewayController::class, 'update'])->name('ai-gateway.update');
+    Route::post('settings/ai-gateway/redeem', [AIGatewayController::class, 'redeem'])->name('ai-gateway.redeem');
 });
+

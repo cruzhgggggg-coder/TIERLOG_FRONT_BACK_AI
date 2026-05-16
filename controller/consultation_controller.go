@@ -83,7 +83,7 @@ func CreateConsultation(c *gin.Context) {
 	}
 
 	// 2. Process with AI (Real Audio + Paper Context + Consistency Check)
-	feedbackItems, transcriptContent, err := AnalyzeAudioAndPaper(audioPath, paperText, prevFeedbackStr)
+	feedbackItems, transcriptContent, err := AnalyzeAudioAndPaper(userID, audioPath, paperText, prevFeedbackStr)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "AI Processing failed: " + err.Error()})
 		return

@@ -144,18 +144,24 @@ type NVIDIAResponse struct {
 	} `json:"choices"`
 }
 
-func callNVIDIA(systemPrompt, userPrompt string, isJSON bool) (string, error) {
-	apiKey := os.Getenv("NVIDIA_API_KEY")
+func callNVIDIA(apiKey, model, systemPrompt, userPrompt string, isJSON bool) (string, error) {
+	if apiKey == "" {
+		apiKey = os.Getenv("NVIDIA_API_KEY")
+	}
 	if apiKey == "" {
 		return "", errors.New("NVIDIA_API_KEY is not set")
 	}
 
-	fmt.Printf("\033[34m[NVIDIA NIM] Initiating request (Model: meta/llama-3.1-70b-instruct)...\033[0m\n")
+	if model == "" {
+		model = "meta/llama-3.1-70b-instruct"
+	}
+
+	fmt.Printf("\033[34m[NVIDIA NIM] Initiating request (Model: %s)...\033[0m\n", model)
 
 	url := "https://integrate.api.nvidia.com/v1/chat/completions"
 	
 	reqBody := NVIDIARequest{
-		Model: "meta/llama-3.1-70b-instruct",
+		Model: model,
 		Messages: []NVIDIAMessage{
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: userPrompt},
@@ -185,6 +191,30 @@ func callNVIDIA(systemPrompt, userPrompt string, isJSON bool) (string, error) {
 	fmt.Printf("\033[32m[NVIDIA NIM] Response Received! Status: %d, Size: %d bytes\033[0m\n", resp.StatusCode, len(body))
 
 	if resp.StatusCode != http.StatusOK {
+		// Fallback for models that do not support json_object format (e.g. Bytedance Seed OSS)
+		if isJSON && reqBody.ResponseFormat != nil {
+			fmt.Printf("\033[33m[NVIDIA NIM] Retrying without JSON response_format...\033[0m\n")
+			reqBody.ResponseFormat = nil
+			retryJsonData, _ := json.Marshal(reqBody)
+			retryReq, _ := http.NewRequest("POST", url, bytes.NewBuffer(retryJsonData))
+			retryReq.Header.Set("Content-Type", "application/json")
+			retryReq.Header.Set("Authorization", "Bearer "+apiKey)
+			
+			retryResp, err := client.Do(retryReq)
+			if err == nil {
+				defer retryResp.Body.Close()
+				retryBody, _ := io.ReadAll(retryResp.Body)
+				if retryResp.StatusCode == http.StatusOK {
+					var retryNvidiaResp NVIDIAResponse
+					if err := json.Unmarshal(retryBody, &retryNvidiaResp); err == nil && len(retryNvidiaResp.Choices) > 0 {
+						return retryNvidiaResp.Choices[0].Message.Content, nil
+					}
+				}
+				// If retry fails, continue to original error
+				body = retryBody
+				resp.StatusCode = retryResp.StatusCode
+			}
+		}
 		return "", fmt.Errorf("NVIDIA API error (%d): %s", resp.StatusCode, string(body))
 	}
 
@@ -200,17 +230,189 @@ func callNVIDIA(systemPrompt, userPrompt string, isJSON bool) (string, error) {
 	return nvidiaResp.Choices[0].Message.Content, nil
 }
 
-func callGemini(systemPrompt, userPrompt string, isJSON bool) (string, error) {
-	apiKey := os.Getenv("GEMINI_API_KEY")
+func callAnthropic(apiKey, model, systemPrompt, userPrompt string) (string, error) {
+	if apiKey == "" {
+		apiKey = os.Getenv("ANTHROPIC_API_KEY")
+	}
+	if apiKey == "" {
+		return "", errors.New("ANTHROPIC_API_KEY is not set")
+	}
+
+	if model == "" {
+		model = "claude-3-5-sonnet-20240620"
+	}
+
+	fmt.Printf("\033[36m[ANTHROPIC AI] Initiating request (Model: %s)...\033[0m\n", model)
+
+	url := "https://api.anthropic.com/v1/messages"
+	
+	reqBody := struct {
+		Model     string `json:"model"`
+		MaxTokens int    `json:"max_tokens"`
+		System    string `json:"system"`
+		Messages  []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
+	}{
+		Model:     model,
+		MaxTokens: 4096,
+		System:    systemPrompt,
+		Messages: []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}{
+			{Role: "user", Content: userPrompt},
+		},
+	}
+
+	jsonData, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("Anthropic API error (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", err
+	}
+
+	if len(result.Content) == 0 {
+		return "", errors.New("Anthropic returned no content")
+	}
+
+	return result.Content[0].Text, nil
+}
+
+func callAI(user *models.User, systemPrompt, userPrompt string, isJSON bool) (string, error) {
+	provider := strings.ToLower(os.Getenv("AI_PROVIDER"))
+	model := ""
+	apiKey := ""
+
+	// AI Gateway Logic: Override if user has keys (Bypassed IsGatewayActive check for testing)
+	if user != nil {
+		if user.PreferredModel != "" && user.PreferredModel != "default" {
+			parts := strings.Split(user.PreferredModel, ":")
+			if len(parts) == 2 {
+				provider = strings.ToLower(parts[0])
+				model = parts[1]
+			}
+		}
+
+		// Pick the right key
+		switch provider {
+		case "openai":
+			apiKey = user.OpenAIKey
+		case "nvidia":
+			apiKey = user.NvidiaKey
+		case "gemini":
+			apiKey = user.GeminiKey
+		case "anthropic":
+			apiKey = user.AnthropicKey
+		}
+	}
+
+	switch provider {
+	case "gemini":
+		return callGemini(apiKey, model, systemPrompt, userPrompt, isJSON)
+	case "anthropic":
+		return callAnthropic(apiKey, model, systemPrompt, userPrompt)
+	case "openai":
+		// We can reuse NVIDIA logic for OpenAI as it's compatible
+		return callOpenAI(apiKey, model, systemPrompt, userPrompt, isJSON)
+	case "nvidia":
+		return callNVIDIA(apiKey, model, systemPrompt, userPrompt, isJSON)
+	default:
+		// Default to system NVIDIA
+		return callNVIDIA("", "", systemPrompt, userPrompt, isJSON)
+	}
+}
+
+// Helper to use NVIDIA-style call for generic OpenAI compatible APIs
+func callOpenAI(apiKey, model, systemPrompt, userPrompt string, isJSON bool) (string, error) {
+	if apiKey == "" {
+		apiKey = os.Getenv("OPENAI_API_KEY")
+	}
+	if model == "" {
+		model = "gpt-4o"
+	}
+
+	url := "https://api.openai.com/v1/chat/completions"
+	
+	reqBody := NVIDIARequest{
+		Model: model,
+		Messages: []NVIDIAMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		},
+	}
+	
+	if isJSON {
+		reqBody.ResponseFormat = &struct {
+			Type string `json:"type"`
+		}{Type: "json_object"}
+	}
+
+	jsonData, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("OpenAI API error (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var nvidiaResp NVIDIAResponse
+	json.Unmarshal(body, &nvidiaResp)
+
+	if len(nvidiaResp.Choices) == 0 {
+		return "", errors.New("OpenAI returned no choices")
+	}
+
+	return nvidiaResp.Choices[0].Message.Content, nil
+}
+
+func callGemini(apiKey, model, systemPrompt, userPrompt string, isJSON bool) (string, error) {
+	if apiKey == "" {
+		apiKey = os.Getenv("GEMINI_API_KEY")
+	}
 	if apiKey == "" {
 		return "", errors.New("GEMINI_API_KEY is not set")
 	}
 
-	fmt.Printf("\033[35m[GEMINI AI] Initiating request (Model: gemini-2.0-flash)...\033[0m\n")
+	if model == "" {
+		model = "gemini-2.0-flash"
+	}
+
+	fmt.Printf("\033[35m[GEMINI AI] Initiating request (Model: %s)...\033[0m\n", model)
 
 	ctx := context.Background()
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
+		APIKey: apiKey,
 	})
 	if err != nil {
 		fmt.Printf("\033[31m[GEMINI AI] Failed to create client: %v\033[0m\n", err)
@@ -227,41 +429,27 @@ func callGemini(systemPrompt, userPrompt string, isJSON bool) (string, error) {
 		config.ResponseMIMEType = "application/json"
 	}
 
-	// Use a single Content struct with a single Part
 	content := &genai.Content{
 		Parts: []*genai.Part{{Text: userPrompt}},
 	}
 
-	resp, err := client.Models.GenerateContent(ctx, "gemini-2.0-flash", []*genai.Content{content}, config)
+	resp, err := client.Models.GenerateContent(ctx, model, []*genai.Content{content}, config)
 	if err != nil {
-		// Second attempt with simplified configuration if MIME type causes issues
 		if isJSON {
 			config.ResponseMIMEType = ""
-			resp, err = client.Models.GenerateContent(ctx, "gemini-2.0-flash", []*genai.Content{content}, config)
+			resp, err = client.Models.GenerateContent(ctx, model, []*genai.Content{content}, config)
 		}
-		
 		if err != nil {
 			fmt.Printf("\033[31m[GEMINI AI] Request Failed: %v\033[0m\n", err)
 			return "", fmt.Errorf("Gemini API error: %v", err)
 		}
 	}
 
-	fmt.Printf("\033[32m[GEMINI AI] Response Received! Candidates: %d\033[0m\n", len(resp.Candidates))
-
 	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
 		return "", errors.New("Gemini returned no content")
 	}
 
 	return resp.Candidates[0].Content.Parts[0].Text, nil
-}
-
-func callAI(systemPrompt, userPrompt string, isJSON bool) (string, error) {
-	provider := strings.ToLower(os.Getenv("AI_PROVIDER"))
-	if provider == "gemini" {
-		return callGemini(systemPrompt, userPrompt, isJSON)
-	}
-	// Default to NVIDIA for backward compatibility or if set explicitly
-	return callNVIDIA(systemPrompt, userPrompt, isJSON)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -273,11 +461,14 @@ type FeedbackResponse struct {
 	Category string `json:"category"`
 }
 
-func AnalyzeAudioAndPaper(audioPath, paperText, prevFeedback string) ([]models.FeedbackItem, string, error) {
+func AnalyzeAudioAndPaper(userID uint64, audioPath, paperText, prevFeedback string) ([]models.FeedbackItem, string, error) {
+	// Fetch user for AI Gateway settings
+	var user models.User
+	koneksi.DB.First(&user, userID)
+
 	// 1. Convert Audio to Text using Groq Whisper
 	transcript, err := transcribeAudio(audioPath)
 	if err != nil {
-		// Log the error but continue to try analyzing just the paper if possible
 		fmt.Printf("Warning: Transcription failed: %v\n", err)
 		transcript = "Transkripsi Audio Gagal: " + err.Error()
 	}
@@ -292,7 +483,7 @@ func AnalyzeAudioAndPaper(audioPath, paperText, prevFeedback string) ([]models.F
 
 	userPrompt := fmt.Sprintf("Berikut adalah transkrip audio bimbingan dosen:\n\"%s\"\n\nDan ini adalah paper mahasiswa:\n\n%s%s\n\nBerikan analisis revisi (HOC/LOC) berdasarkan transkrip tersebut.", transcript, paperText, consistencyContext)
 
-	rawResponse, err := callAI(systemPrompt, userPrompt, true)
+	rawResponse, err := callAI(&user, systemPrompt, userPrompt, true)
 	if err != nil {
 		return nil, transcript, err
 	}
@@ -313,7 +504,6 @@ func AnalyzeAudioAndPaper(audioPath, paperText, prevFeedback string) ([]models.F
 	}
 
 	if err := json.Unmarshal([]byte(cleanJSON), &aiResponse); err != nil {
-		// Fallback: search for { ... } in case of extra text
 		start := strings.Index(cleanJSON, "{")
 		end := strings.LastIndex(cleanJSON, "}")
 		if start != -1 && end != -1 && end > start {
@@ -346,9 +536,9 @@ PROCESS:
 //  CONVERSATIONAL ASSISTANCE
 // ─────────────────────────────────────────────────────────────────────────────
 
-func GenerateRevisionAssistance(logID uint64, studentQuery string) (string, error) {
+func GenerateRevisionAssistance(logID uint64, studentQuery string, modelOverride string) (string, error) {
 	var log models.ConsultationLog
-	if err := koneksi.DB.Preload("FeedbackItems").First(&log, logID).Error; err != nil {
+	if err := koneksi.DB.Preload("FeedbackItems").Preload("Student.User").First(&log, logID).Error; err != nil {
 		return "", fmt.Errorf("database error: %w", err)
 	}
 
@@ -365,7 +555,14 @@ func GenerateRevisionAssistance(logID uint64, studentQuery string) (string, erro
 	finalSystemPrompt := strings.ReplaceAll(systemPromptTemplate, feedbackPlaceholder, formattedFeedback)
 	finalSystemPrompt = strings.ReplaceAll(finalSystemPrompt, transcriptPlaceholder, log.TranscriptText)
 
-	return callAI(finalSystemPrompt, studentQuery, false)
+	// Apply model override if provided
+	user := log.Student.User
+	if modelOverride != "" && modelOverride != "default" {
+		user.PreferredModel = modelOverride
+		user.IsGatewayActive = true // Force active if a specific model is chosen
+	}
+
+	return callAI(user, finalSystemPrompt, studentQuery, false)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -376,6 +573,7 @@ func AIAssistHandler(c *gin.Context) {
 	var req struct {
 		LogID uint64 `json:"log_id" binding:"required"`
 		Query string `json:"query"  binding:"required"`
+		Model string `json:"model"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -383,7 +581,7 @@ func AIAssistHandler(c *gin.Context) {
 		return
 	}
 
-	response, err := GenerateRevisionAssistance(req.LogID, req.Query)
+	response, err := GenerateRevisionAssistance(req.LogID, req.Query, req.Model)
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "GUARDED:") {
 			c.JSON(http.StatusForbidden, gin.H{"status": "guarded", "message": err.Error()})
@@ -394,4 +592,54 @@ func AIAssistHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "ai_response": response})
+}
+
+func GetAIModels(c *gin.Context) {
+	provider := c.Query("provider")
+	apiKey := c.Query("api_key")
+
+	if provider != "nvidia" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only nvidia provider supports dynamic models currently"})
+		return
+	}
+
+	if apiKey == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "api_key is required"})
+		return
+	}
+
+	req, _ := http.NewRequest("GET", "https://integrate.api.nvidia.com/v1/models", nil)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		c.JSON(resp.StatusCode, gin.H{"error": string(body)})
+		return
+	}
+
+	var response struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode models response"})
+		return
+	}
+
+	var models []string
+	for _, m := range response.Data {
+		models = append(models, m.ID)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"models": models})
 }

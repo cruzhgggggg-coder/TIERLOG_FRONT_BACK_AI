@@ -31,7 +31,9 @@ func ConnectDatabase() {
 		&models.Student{},
 		&models.ConsultationLog{},
 		&models.FeedbackItem{},
+		&models.RedeemCode{},
 	)
+
 
 	DB = database
 	fmt.Println("Koneksi database berhasil!")

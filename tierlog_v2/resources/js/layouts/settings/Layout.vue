@@ -8,6 +8,7 @@ import { toUrl } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
 import { edit as editProfile } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
+import { edit as editAIGateway } from '@/routes/ai-gateway';
 import type { NavItem } from '@/types';
 
 const sidebarNavItems: NavItem[] = [
@@ -23,7 +24,12 @@ const sidebarNavItems: NavItem[] = [
         title: 'Appearance',
         href: editAppearance(),
     },
+    {
+        title: 'AI Gateway',
+        href: editAIGateway(),
+    },
 ];
+
 
 const { isCurrentOrParentUrl } = useCurrentUrl();
 </script>
