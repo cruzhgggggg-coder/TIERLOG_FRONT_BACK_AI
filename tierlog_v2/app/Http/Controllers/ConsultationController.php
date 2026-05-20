@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
+use App\Events\FeedbackStatusUpdated;
+use App\Events\AIChatMessageBroadcasted;
 
 class ConsultationController extends Controller
 {
@@ -117,6 +119,13 @@ class ConsultationController extends Controller
             return response()->json(['error' => 'Akses ditolak atau Log tidak ditemukan.'], 403);
         }
 
+        // Broadcast student query live
+        try {
+            broadcast(new AIChatMessageBroadcasted((int) $request->log_id, 'user', $request->input('query')))->toOthers();
+        } catch (\Exception $e) {
+            \Log::error("Failed to broadcast AIChatMessageBroadcasted student event: " . $e->getMessage());
+        }
+
         $response = Http::timeout(120)->post("{$this->goBackendUrl}/api/ai/assist", [
             'log_id' => (int) $request->log_id,
             'query' => $request->input('query'),
@@ -124,7 +133,16 @@ class ConsultationController extends Controller
         ]);
 
         if ($response->successful()) {
-            return response()->json($response->json());
+            $responseData = $response->json();
+            // Broadcast AI response live
+            if (isset($responseData['ai_response'])) {
+                try {
+                    broadcast(new AIChatMessageBroadcasted((int) $request->log_id, 'ai', $responseData['ai_response']))->toOthers();
+                } catch (\Exception $e) {
+                    \Log::error("Failed to broadcast AIChatMessageBroadcasted AI event: " . $e->getMessage());
+                }
+            }
+            return response()->json($responseData);
         }
 
         $errorData = $response->json();
@@ -185,9 +203,9 @@ class ConsultationController extends Controller
             return response()->json(['error' => 'Hanya Dosen yang dapat memvalidasi feedback.'], 403);
         }
 
-        // Security Check: Student can only set status to Fixed
-        if ($request->status === 'Fixed' && $user->role !== 'student') {
-            return response()->json(['error' => 'Hanya Mahasiswa yang dapat menandai feedback sebagai diperbaiki.'], 403);
+        // Security Check: Student can only set status to Fixed or back to Pending (undo)
+        if (in_array($request->status, ['Fixed', 'Pending']) && $user->role !== 'student') {
+            return response()->json(['error' => 'Hanya Mahasiswa yang dapat mengubah status ini.'], 403);
         }
 
         $response = Http::put("{$this->goBackendUrl}/api/feedback/{$id}/status", [
@@ -195,6 +213,25 @@ class ConsultationController extends Controller
         ]);
 
         if ($response->successful()) {
+            // Get log_id from Go response or from request
+            $goData = $response->json();
+            $logId = $goData['data']['log_id'] 
+                  ?? $goData['log_id'] 
+                  ?? $request->input('log_id');
+
+            // Broadcast only if we have a log_id to build the channel name
+            if ($logId) {
+                try {
+                    broadcast(new FeedbackStatusUpdated(
+                        feedbackId: (int) $id,
+                        logId: (int) $logId,
+                        newStatus: $request->status,
+                        updatedByRole: $user->role,
+                    ))->toOthers();
+                } catch (\Exception $e) {
+                    \Log::error("Failed to broadcast FeedbackStatusUpdated event: " . $e->getMessage());
+                }
+            }
             return response()->json(['message' => 'Status feedback berhasil diperbarui.']);
         }
 

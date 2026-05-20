@@ -53,7 +53,6 @@ class CreateNewUser implements CreatesNewUsers
                     $lecturer = $systemLecturer->lecturer()->create([
                         'name' => 'System Lecturer',
                         'nip' => '0000000000',
-                        'keahlian' => 'AI System',
                         'faculty' => 'Technology',
                     ]);
                 }
@@ -67,9 +66,8 @@ class CreateNewUser implements CreatesNewUsers
             } else {
                 $user->lecturer()->create([
                     'name' => $user->name,
-                    'nip' => $input['nip'] ?? 'LECTURER-' . str_pad($user->id, 5, '0', STR_PAD_LEFT),
-                    'keahlian' => $input['keahlian'] ?? 'General',
-                    'faculty' => $input['faculty'] ?? 'General',
+                    'nip' => $input['nip'] ?? 'NIP-' . str_pad($user->id, 8, '0', STR_PAD_LEFT),
+                    'faculty' => $input['faculty'] ?? null,
                 ]);
             }
 

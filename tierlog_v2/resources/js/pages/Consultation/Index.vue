@@ -1,6 +1,6 @@
 <script setup>
 import { Head, useForm } from '@inertiajs/vue3';
-import { ref, onMounted, computed, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue';
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller';
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
 
@@ -38,7 +38,7 @@ const steps = [
 
 const submit = async () => {
     if (!form.paper || !form.audio) {
-        toast.error('Harap pilih dokumen (.docx) dan rekaman audio sebelum sinkronisasi.');
+        toast.error('Please select a document (.docx) and an audio recording before syncing.');
         return;
     }
 
@@ -66,7 +66,7 @@ const submit = async () => {
             clearInterval(stepInterval);
             isProcessing.value = false;
             
-            const errorMsg = Object.values(errors).flat()[0] || 'Gagal memproses konsultasi. Silakan coba lagi.';
+            const errorMsg = Object.values(errors).flat()[0] || 'Failed to process consultation. Please try again.';
             toast.error(errorMsg);
         },
     });
@@ -160,19 +160,67 @@ const askAI = async () => {
         });
     } catch (e) {
         console.error(e);
-        const errorMsg = e.response?.data?.message || e.response?.data?.error || 'Terjadi kesalahan saat menghubungi Master Mind.';
+        const errorMsg = e.response?.data?.message || e.response?.data?.error || 'An error occurred while contacting Master Mind.';
         chatHistory.value.push({ role: 'system', content: errorMsg });
     } finally {
         isChatting.value = false;
     }
 };
 
+const currentChannel = ref(null);
+
 const selectLog = (log) => {
     selectedLog.value = log;
     chatHistory.value = [
-        { role: 'system', content: `Master Mind aktif untuk sesi: ${log.paper_filename}. Tanyakan apa saja tentang revisi Anda.` }
+        { role: 'system', content: `Master Mind active for session: ${log.paper_filename}. Ask anything about your revision.` }
     ];
+
+    // Join Echo channel for real-time updates
+    if (window.Echo) {
+        if (currentChannel.value) {
+            window.Echo.leave(currentChannel.value);
+        }
+        currentChannel.value = `consultation.${log.id}`;
+        window.Echo.channel(currentChannel.value)
+            .listen('.feedback.status-updated', (e) => {
+                // payload: { feedback_id, log_id, status, updated_by_role }
+                const item = selectedLog.value?.feedback_items?.find(f => f.id == e.feedback_id);
+                if (item) {
+                    item.status = e.status;
+                    if (e.status === 'Validated' && e.updated_by_role === 'lecturer') {
+                        toast.success(`Dosen memvalidasi revisi Anda!`, {
+                            duration: 5000,
+                            icon: '✅'
+                        });
+                    }
+                }
+            });
+    }
 };
+
+const updateStatus = async (feedbackId, status) => {
+    try {
+        const logId = selectedLog.value?.id;
+        await axios.put(`/consultation/feedback/${feedbackId}/status`, { 
+            status,
+            log_id: logId,
+        });
+        if (selectedLog.value) {
+            const item = selectedLog.value.feedback_items.find(f => f.id === feedbackId);
+            if (item) item.status = status;
+        }
+        toast.info('Status feedback diperbarui ke: ' + status, { icon: '🔄' });
+    } catch (e) {
+        console.error('Error updating status:', e);
+        toast.error(e.response?.data?.error || 'Gagal memperbarui status feedback.');
+    }
+};
+
+onUnmounted(() => {
+    if (window.Echo && currentChannel.value) {
+        window.Echo.leave(currentChannel.value);
+    }
+});
 
 const allFeedback = computed(() => {
     if (!selectedLog.value) return [];
@@ -190,7 +238,7 @@ const isNeuralSyncing = ref(false);
 const askAIContextual = async (item) => {
     isNeuralSyncing.value = true;
     const context = item.category === 'HOC' ? 'Higher Order (Struktural)' : 'Lower Order (Teknis)';
-    chatQuery.value = `[CONTRADICTION DETECTED] Saya butuh bantuan untuk feedback ${context} ini: "${item.content}". Bagaimana saran Master Mind untuk memperbaikinya?`;
+    chatQuery.value = `[CONTRADICTION DETECTED] I need help with this ${context} feedback: "${item.content}". What does Master Mind suggest to fix this?`;
     
     // Smooth transition to chat
     await nextTick();
@@ -416,11 +464,21 @@ watch(chatHistory, () => {
                                                     item.type === 'hoc' ? 'border-white/5' : 'border-white/5'
                                                 ]"
                                             >
-                                                <!-- Category Badge -->
-                                                <div class="flex items-center gap-3 mb-4">
-                                                    <span :class="['w-2 h-2 rounded-full shadow-lg', item.type === 'hoc' ? 'bg-fuchsia-400 shadow-fuchsia-400/50' : 'bg-cyan-400 shadow-cyan-400/50']"></span>
-                                                    <span class="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
-                                                        {{ item.type === 'hoc' ? 'Structural logic :: HOC' : 'Technical precision :: LOC' }}
+                                                <!-- Category & Status Badges -->
+                                                <div class="flex items-center justify-between mb-4">
+                                                    <div class="flex items-center gap-3">
+                                                        <span :class="['w-2 h-2 rounded-full shadow-lg', item.type === 'hoc' ? 'bg-fuchsia-400 shadow-fuchsia-400/50' : 'bg-cyan-400 shadow-cyan-400/50']"></span>
+                                                        <span class="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
+                                                            {{ item.type === 'hoc' ? 'Structural logic :: HOC' : 'Technical precision :: LOC' }}
+                                                        </span>
+                                                    </div>
+                                                    <span :class="[
+                                                        'px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tighter border transition-all duration-300 backdrop-blur-xs',
+                                                        item.status === 'Validated' ? 'bg-green-500/10 text-green-400 border-green-500/20 shadow-[0_0_10px_rgba(34,197,94,0.1)]' :
+                                                        item.status === 'Fixed' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20 shadow-[0_0_10px_rgba(234,179,8,0.1)]' :
+                                                        'bg-rose-500/10 text-rose-400 border-rose-500/20 shadow-[0_0_10px_rgba(244,63,94,0.1)]'
+                                                    ]">
+                                                        {{ item.status || 'Pending' }}
                                                     </span>
                                                 </div>
 
@@ -442,6 +500,30 @@ watch(chatHistory, () => {
                                                             </svg>
                                                             <div v-else class="w-4.5 h-4.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
                                                         </button>
+
+                                                        <!-- Mark as Fixed (shown when Pending) -->
+                                                        <button 
+                                                            v-if="item.status === 'Pending' || !item.status"
+                                                            @click="updateStatus(item.id, 'Fixed')"
+                                                            class="p-2.5 rounded-xl transition-all hover:scale-110 active:scale-90 shadow-xl relative overflow-hidden bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
+                                                            title="Mark as Fixed"
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                        </button>
+
+                                                        <!-- Undo to Pending (shown when Fixed, before Validated) -->
+                                                        <button 
+                                                            v-if="item.status === 'Fixed'"
+                                                            @click="updateStatus(item.id, 'Pending')"
+                                                            class="p-2.5 rounded-xl transition-all hover:scale-110 active:scale-90 shadow-xl relative overflow-hidden bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                                                            title="Undo — Kembalikan ke Pending"
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                            </svg>
+                                                        </button>
                                                     </div>
                                                 </div>
                                                 
@@ -455,7 +537,7 @@ watch(chatHistory, () => {
                                 </DynamicScroller>
                                 
                                 <div v-else-if="activeTab === 'transcript'" class="h-full overflow-y-auto pr-4 custom-scrollbar text-slate-300 text-[13px] leading-relaxed p-6 rounded-3xl border border-white/5 bg-zinc-900/50">
-                                    <p class="whitespace-pre-wrap">{{ selectedLog.transcript_text || 'Tidak ada transkrip tersedia.' }}</p>
+                                    <p class="whitespace-pre-wrap">{{ selectedLog.transcript_text || 'No transcript available.' }}</p>
                                 </div>
                             </div>
                         </div>

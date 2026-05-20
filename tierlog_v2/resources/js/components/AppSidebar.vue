@@ -32,12 +32,12 @@ const mainNavItems = computed<NavItem[]>(() => {
     if (!isLecturer.value) {
         items.push(
             {
-                title: 'Konsultasi AI',
+                title: 'AI Consultation',
                 href: '/consultation',
                 icon: Mic,
             },
             {
-                title: 'Arsip Log',
+                title: 'Log Archive',
                 href: '/logs',
                 icon: History,
             }
@@ -80,7 +80,7 @@ const mainNavItems = computed<NavItem[]>(() => {
     <slot />
 </template>
 
-<style scoped>
+<style scoped lang="postcss">
 @reference "tailwindcss";
 
 :deep(.sidebar-menu-button) {

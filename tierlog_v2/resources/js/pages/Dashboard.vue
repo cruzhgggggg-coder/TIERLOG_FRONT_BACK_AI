@@ -93,7 +93,7 @@ onMounted(() => {
                                     </div>
                                     <div class="flex flex-col">
                                         <p class="text-[8px] uppercase tracking-[0.2em] opacity-50 font-black">Lecturer Paired</p>
-                                        <p class="text-[10px] font-black truncate max-w-[120px]">{{ stats.lecturer_name || 'Belum Ditentukan' }}</p>
+                                        <p class="text-[10px] font-black truncate max-w-[120px]">{{ stats.lecturer_name || 'Not Assigned' }}</p>
                                     </div>
                                 </div>
                             </div>
@@ -101,7 +101,7 @@ onMounted(() => {
 
                         <!-- Completion Node -->
                         <div class="bg-white/5 border border-white/10 rounded-4xl p-6 text-white backdrop-blur-xl group hover:border-indigo-500/50 transition-all duration-500">
-                            <p class="text-xs font-bold uppercase tracking-widest text-slate-500 group-hover:text-indigo-400 transition-colors">Penyelesaian</p>
+                            <p class="text-xs font-bold uppercase tracking-widest text-slate-500 group-hover:text-indigo-400 transition-colors">Completion</p>
                             <h3 class="text-4xl font-black mt-2 tabular-nums">{{ stats.completion_rate }}<span class="text-lg opacity-50 ml-1">%</span></h3>
                             <div class="w-full bg-white/5 h-1.5 mt-6 rounded-full overflow-hidden border border-white/5">
                                 <div class="bg-linear-to-r from-indigo-500 to-purple-500 h-full transition-all duration-1000 shadow-[0_0_10px_rgba(99,102,241,0.5)]" :style="{ width: stats.completion_rate + '%' }"></div>
@@ -129,9 +129,9 @@ onMounted(() => {
                             <div class="absolute top-0 right-0 p-4 opacity-20 group-hover:rotate-12 transition-transform duration-500">
                                 <svg class="w-12 h-12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20" /></svg>
                             </div>
-                            <p class="text-xs font-bold uppercase tracking-widest opacity-70">Total Sesi</p>
+                            <p class="text-xs font-bold uppercase tracking-widest opacity-70">Total Sessions</p>
                             <h3 class="text-4xl font-black mt-2 tabular-nums">{{ stats.total_consultations }}</h3>
-                            <p class="text-[9px] mt-4 bg-white/20 inline-block px-2 py-1 rounded-full uppercase tracking-tighter font-black">Sync: Juni 2026</p>
+                            <p class="text-[9px] mt-4 bg-white/20 inline-block px-2 py-1 rounded-full uppercase tracking-tighter font-black">Sync: June 2026</p>
                         </div>
                     </div>
 
@@ -143,16 +143,16 @@ onMounted(() => {
                             
                             <div class="relative z-10">
                                 <span class="inline-block px-3 py-1 bg-indigo-500/20 border border-indigo-500/30 rounded-full text-[10px] font-black tracking-[0.2em] text-indigo-400 uppercase mb-4">Neural Interface Ready</span>
-                                <h2 class="text-4xl font-black mb-4 tracking-tighter">Mulai Eksplorasi <span class="italic text-indigo-500">Master Mind</span></h2>
+                                <h2 class="text-4xl font-black mb-4 tracking-tighter">Start Exploring <span class="italic text-indigo-500">Master Mind</span></h2>
                                 <p class="text-slate-400 max-w-md text-lg leading-relaxed mb-10">
-                                    Transkripsi audio real-time dan analisis draft paper dengan akurasi Gemini 2.0 Flash Core.
+                                    Real-time audio transcription and paper draft analysis with Gemini 2.0 Flash Core accuracy.
                                 </p>
                                 
                                 <Link 
                                     href="/consultation" 
                                     class="inline-flex items-center gap-4 bg-white text-black px-10 py-5 rounded-2xl font-black hover:bg-indigo-50 transition-all active:scale-95 group/btn"
                                 >
-                                    <span class="tracking-tight text-lg">Mulai Konsultasi AI</span>
+                                    <span class="tracking-tight text-lg">Start AI Consultation</span>
                                     <div class="bg-black text-white p-1 rounded-full group-hover/btn:translate-x-1 transition-transform">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                                             <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd" />

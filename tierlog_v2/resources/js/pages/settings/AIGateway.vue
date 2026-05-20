@@ -41,7 +41,7 @@ const providerModels = ref({
 
 const isFetchingModels = ref(false);
 
-const fetchNvidiaModels = async (apiKey) => {
+const fetchNvidiaModels = async (apiKey: string) => {
     try {
         isFetchingModels.value = true;
         const response = await axios.get(`http://localhost:8080/api/ai/models?provider=nvidia&api_key=${apiKey}`);
@@ -104,7 +104,7 @@ const handleModelChange = (e: any) => {
             <Heading
                 variant="small"
                 title="AI Gateway"
-                description="Ubah TierLog menjadi AI Gateway pribadi Anda dengan menghubungkan model AI favorit."
+                description="Turn TierLog into your personal AI Gateway by connecting your favorite AI models."
             />
         </div>
 
@@ -116,7 +116,7 @@ const handleModelChange = (e: any) => {
             <div>
                 <h3 class="text-lg font-bold text-white">Plug-and-Play AI Gateway</h3>
                 <p class="text-sm text-slate-400 mt-1">
-                    Masukkan API Key Anda di bawah ini. Sistem akan secara otomatis mendeteksi kunci yang aktif dan membuka pilihan model baru di workspace konsultasi Anda.
+                    Enter your API Key below. The system will automatically detect the active key and unlock new model options in your consultation workspace.
                 </p>
             </div>
         </div>
@@ -135,7 +135,7 @@ const handleModelChange = (e: any) => {
                             Universal API Connector
                         </h3>
                         <p class="text-sm text-slate-400 mt-2">
-                            Tempelkan API Key Anda di bawah ini. Sistem akan mendeteksi provider secara otomatis.
+                            Paste your API Key below. The system will detect the provider automatically.
                         </p>
                     </div>
 
@@ -170,13 +170,13 @@ const handleModelChange = (e: any) => {
                                 <Brain class="w-5 h-5" />
                             </div>
                             <div>
-                                <h4 class="text-sm font-bold text-white">Membuka Akses Model:</h4>
+                                <h4 class="text-sm font-bold text-white">Unlocking Model Access:</h4>
                                 <div class="flex flex-wrap gap-2 mt-2">
                                     <span v-for="m in providerModels[detectedProvider]" :key="m" class="px-2 py-1 bg-white/10 rounded-md text-[10px] font-black tracking-widest text-slate-400">
                                         {{ m }}
                                     </span>
                                     <span v-if="isFetchingModels" class="px-2 py-1 bg-white/10 rounded-md text-[10px] font-black text-indigo-400 animate-pulse">
-                                        Memuat Model dari NVIDIA...
+                                        Loading Models from NVIDIA...
                                     </span>
                                 </div>
                             </div>
@@ -190,7 +190,7 @@ const handleModelChange = (e: any) => {
                             class="bg-indigo-600 hover:bg-indigo-700 text-white px-8 h-12 rounded-xl font-bold shadow-xl shadow-indigo-500/20 disabled:opacity-20 transition-all active:scale-95"
                         >
                             <Key class="w-4 h-4 mr-2" />
-                            Simpan & Hubungkan
+                            Save & Connect
                         </Button>
                     </div>
                 </div>
@@ -223,7 +223,7 @@ const handleModelChange = (e: any) => {
                 <div class="grid gap-2 sm:col-span-2">
                     <Label for="preferred_model" class="flex items-center gap-2">
                         <Brain class="w-4 h-4 text-indigo-500" />
-                        Model Utama (Preferred Model)
+                        Preferred Model
                     </Label>
                     <select
                         id="preferred_model"
@@ -256,7 +256,7 @@ const handleModelChange = (e: any) => {
                             <option v-for="m in providerModels.nvidia" :key="m" :value="'nvidia:' + m">{{ m }}</option>
                         </optgroup>
                     </select>
-                    <p class="text-xs text-slate-500">Model terpilih akan digunakan sebagai asisten utama.</p>
+                    <p class="text-xs text-slate-500">The selected model will be used as the primary assistant.</p>
                 </div>
             </Form>
         </div>
@@ -266,18 +266,18 @@ const handleModelChange = (e: any) => {
             <CardHeader>
                 <CardTitle class="text-sm flex items-center gap-2">
                     <Brain class="w-4 h-4 text-indigo-500" />
-                    Tentang AI Gateway
+                    About AI Gateway
                 </CardTitle>
             </CardHeader>
             <CardContent class="text-xs text-slate-600 dark:text-slate-400 space-y-2">
                 <p>
-                    AI Gateway memungkinkan Anda membawa "otak" AI Anda sendiri ke dalam infrastruktur TierLog. 
-                    Data Anda tetap diproses dengan standar keamanan TierLog, namun menggunakan kapasitas model yang Anda miliki.
+                    AI Gateway allows you to bring your own AI "brain" into the TierLog infrastructure. 
+                    Your data is still processed with TierLog's security standards, but using your own model capacity.
                 </p>
                 <ul class="list-disc pl-4 space-y-1">
-                    <li>Kunci API Anda disimpan secara terenkripsi.</li>
-                    <li>TierLog tidak mengambil keuntungan dari penggunaan token API Anda.</li>
-                    <li>Anda bertanggung jawab atas biaya yang timbul di penyedia model AI masing-masing.</li>
+                    <li>Your API keys are stored encrypted.</li>
+                    <li>TierLog does not profit from your API token usage.</li>
+                    <li>You are responsible for any costs incurred with your respective AI model providers.</li>
                 </ul>
             </CardContent>
         </Card>

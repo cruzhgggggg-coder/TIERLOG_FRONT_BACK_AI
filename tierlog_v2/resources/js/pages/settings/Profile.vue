@@ -83,52 +83,52 @@ const user = computed(() => page.props.auth.user as any);
             <!-- Student Specific Fields -->
             <template v-if="user.role === 'student'">
                 <div class="grid gap-2">
-                    <Label for="nim">NIM</Label>
+                    <Label for="nim">Student ID</Label>
                     <Input
                         id="nim"
                         class="mt-1 block w-full"
                         name="nim"
                         :default-value="user.student?.nim"
                         required
-                        placeholder="Nomor Induk Mahasiswa"
+                        placeholder="Student ID"
                     />
                     <InputError class="mt-2" :message="errors.nim" />
                 </div>
 
                 <div class="grid gap-2">
-                    <Label for="prodi">Program Studi</Label>
+                    <Label for="prodi">Study Program</Label>
                     <Input
                         id="prodi"
                         class="mt-1 block w-full"
                         name="prodi"
                         :default-value="user.student?.prodi"
                         required
-                        placeholder="Contoh: Teknik Informatika"
+                        placeholder="e.g., Computer Science"
                     />
                     <InputError class="mt-2" :message="errors.prodi" />
                 </div>
 
                 <div class="grid gap-2">
-                    <Label for="thesis_title">Judul Tugas Akhir</Label>
+                    <Label for="thesis_title">Thesis Title</Label>
                     <Input
                         id="thesis_title"
                         class="mt-1 block w-full"
                         name="thesis_title"
                         :default-value="user.student?.thesis_title"
-                        placeholder="Masukkan judul TA lengkap"
+                        placeholder="Enter complete thesis title"
                     />
                     <InputError class="mt-2" :message="errors.thesis_title" />
                 </div>
 
                 <div class="grid gap-2">
-                    <Label for="lecturer_id">Dosen Pembimbing</Label>
+                    <Label for="lecturer_id">Advisor</Label>
                     <select
                         id="lecturer_id"
                         name="lecturer_id"
                         class="mt-1 block w-full bg-background border border-input rounded-md px-3 py-2 text-sm"
                         :value="user.student?.lecturer_id"
                     >
-                        <option value="">Pilih Dosen Pembimbing</option>
+                        <option value="">Select Advisor</option>
                         <option v-for="lecturer in lecturers" :key="lecturer.id" :value="lecturer.id">
                             {{ lecturer.name }}
                         </option>
@@ -140,27 +140,27 @@ const user = computed(() => page.props.auth.user as any);
             <!-- Lecturer Specific Fields -->
             <template v-if="user.role === 'lecturer'">
                 <div class="grid gap-2">
-                    <Label for="nip">NIP</Label>
+                    <Label for="nip">Employee ID</Label>
                     <Input
                         id="nip"
                         class="mt-1 block w-full"
                         name="nip"
                         :default-value="user.lecturer?.nip"
                         required
-                        placeholder="Nomor Induk Pegawai"
+                        placeholder="Employee ID"
                     />
                     <InputError class="mt-2" :message="errors.nip" />
                 </div>
 
                 <div class="grid gap-2">
-                    <Label for="faculty">Fakultas</Label>
+                    <Label for="faculty">Faculty</Label>
                     <Input
                         id="faculty"
                         class="mt-1 block w-full"
                         name="faculty"
                         :default-value="user.lecturer?.faculty"
                         required
-                        placeholder="Contoh: Fakultas Teknik"
+                        placeholder="e.g., Engineering Faculty"
                     />
                     <InputError class="mt-2" :message="errors.faculty" />
                 </div>

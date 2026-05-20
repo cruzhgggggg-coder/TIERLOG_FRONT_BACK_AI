@@ -47,3 +47,10 @@ scratch/
 agent.md
 query
 screenshoot/
+
+# Agent/IDE Specific
+.agents/
+.planning/
+SKILL.md
+skills-lock.json
+

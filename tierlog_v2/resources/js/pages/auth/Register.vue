@@ -61,7 +61,7 @@ defineOptions({
             </div>
 
             <div class="grid gap-2">
-                <Label for="role">Daftar Sebagai</Label>
+                <Label for="role">Register As</Label>
                 <select 
                     id="role" 
                     name="role" 
@@ -70,21 +70,21 @@ defineOptions({
                     required
                     :tabindex="2.5"
                 >
-                    <option value="student">Mahasiswa</option>
-                    <option value="lecturer">Dosen</option>
+                    <option value="student">Student</option>
+                    <option value="lecturer">Lecturer</option>
                 </select>
                 <InputError :message="errors.role" />
             </div>
 
             <!-- Conditional Lecturer Fields -->
             <div v-if="selectedRole === 'lecturer'" class="grid gap-2">
-                <Label for="nip">NIP</Label>
+                <Label for="nip">Employee ID</Label>
                 <Input
                     id="nip"
                     type="text"
                     required
                     name="nip"
-                    placeholder="Nomor Induk Pegawai"
+                    placeholder="Employee ID"
                 />
                 <InputError :message="errors.nip" />
             </div>
@@ -92,25 +92,25 @@ defineOptions({
             <!-- Conditional Student Fields -->
             <template v-if="selectedRole === 'student'">
                 <div class="grid gap-2">
-                    <Label for="nim">NIM</Label>
+                    <Label for="nim">Student ID</Label>
                     <Input
                         id="nim"
                         type="text"
                         required
                         name="nim"
-                        placeholder="Nomor Induk Mahasiswa"
+                        placeholder="Student ID"
                     />
                     <InputError :message="errors.nim" />
                 </div>
 
                 <div class="grid gap-2">
-                    <Label for="prodi">Program Studi</Label>
+                    <Label for="prodi">Study Program</Label>
                     <Input
                         id="prodi"
                         type="text"
                         required
                         name="prodi"
-                        placeholder="Contoh: Teknik Informatika"
+                        placeholder="Example: Computer Science"
                     />
                     <InputError :message="errors.prodi" />
                 </div>

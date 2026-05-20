@@ -31,3 +31,6 @@ initializeTheme();
 
 // This will listen for flash toast data from the server...
 initializeFlashToast();
+
+// This will initialize Laravel Echo and Reverb client connections...
+import '@/echo';

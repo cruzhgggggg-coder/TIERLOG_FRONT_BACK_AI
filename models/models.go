@@ -36,7 +36,6 @@ type User struct {
 	Role      UserRole       `gorm:"type:enum('student','lecturer');not null" json:"role"`
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
 	// Profiles
 	Student  *Student  `gorm:"foreignKey:UserID" json:"student,omitempty"`
@@ -58,7 +57,6 @@ type RedeemCode struct {
 	UsedBy    *uint64        `json:"used_by"`
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 type Lecturer struct {
@@ -69,7 +67,6 @@ type Lecturer struct {
 	Faculty   string         `gorm:"type:varchar(100)" json:"faculty"`
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
 	User User `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"user,omitempty"`
 }
@@ -84,7 +81,6 @@ type Student struct {
 	ThesisTitle string         `gorm:"type:text" json:"thesis_title"`
 	CreatedAt   time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt   time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
 
 	User     *User     `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"user,omitempty"`
 	Lecturer *Lecturer `gorm:"foreignKey:LecturerID;constraint:OnDelete:RESTRICT" json:"lecturer,omitempty"`
@@ -99,7 +95,6 @@ type ConsultationLog struct {
 	PaperFilename      string         `gorm:"type:varchar(255)" json:"paper_filename"`
 	CreatedAt          time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt          time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt          gorm.DeletedAt `gorm:"index" json:"-"`
 
 	Student       *Student       `gorm:"foreignKey:StudentID;constraint:OnDelete:CASCADE" json:"student,omitempty"`
 	FeedbackItems []FeedbackItem `gorm:"foreignKey:ConsultationLogID;constraint:OnDelete:CASCADE" json:"feedback_items"`
@@ -113,5 +108,4 @@ type FeedbackItem struct {
 	Status    FeedbackStatus   `gorm:"type:enum('Fixed','Pending','Validated');not null;default:'Pending'" json:"status"`
 	CreatedAt time.Time        `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time        `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt gorm.DeletedAt   `gorm:"index" json:"-"`
 }

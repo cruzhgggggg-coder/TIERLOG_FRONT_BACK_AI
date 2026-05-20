@@ -21,14 +21,14 @@ defineOptions({
     layout: {
         breadcrumbs: [
             { title: 'Dashboard', href: '/dashboard' },
-            { title: 'Arsip Log', href: '/logs' },
+            { title: 'Log Archive', href: '/logs' },
         ],
     },
 });
 </script>
 
 <template>
-    <Head title="Arsip Log Konsultasi" />
+    <Head title="Consultation Log Archive" />
 
     <AppLayout>
         <div class="py-12 px-4 sm:px-6 lg:px-8 bg-[#030305] min-h-screen text-white relative">
@@ -38,7 +38,7 @@ defineOptions({
             <div class="max-w-7xl mx-auto space-y-8 relative z-10">
                 <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div>
-                        <h1 class="text-4xl font-black tracking-tighter uppercase">Arsip <span class="text-indigo-500">Log</span></h1>
+                        <h1 class="text-4xl font-black tracking-tighter uppercase">Log <span class="text-indigo-500">Archive</span></h1>
                         <p class="text-slate-500 font-bold uppercase tracking-widest text-[10px] mt-2">Historical Neural Synchronization Data</p>
                     </div>
                     
@@ -46,7 +46,7 @@ defineOptions({
                         <input 
                             v-model="searchQuery"
                             type="text" 
-                            placeholder="Cari berdasarkan nama file..." 
+                            placeholder="Search by file name..." 
                             class="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:border-indigo-500/50 transition-all placeholder:text-slate-600 font-bold"
                         />
                         <div class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600">
@@ -114,8 +114,8 @@ defineOptions({
                                             <div class="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mb-6 border border-white/5">
                                                 <svg class="w-10 h-10 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
                                             </div>
-                                            <p class="text-slate-500 font-black uppercase tracking-[0.2em] text-xs">Arsip Kosong</p>
-                                            <p class="text-[10px] text-slate-600 mt-2 font-bold uppercase tracking-widest">Mulai sinkronisasi pertama Anda di menu Konsultasi</p>
+                                            <p class="text-slate-500 font-black uppercase tracking-[0.2em] text-xs">Archive Empty</p>
+                                            <p class="text-[10px] text-slate-600 mt-2 font-bold uppercase tracking-widest">Start your first synchronization in the Consultation menu</p>
                                         </div>
                                     </td>
                                 </tr>
