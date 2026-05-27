@@ -21,70 +21,159 @@ class DemoDataSeeder extends Seeder
     {
         DB::statement('SET FOREIGN_KEY_CHECKS=0;');
         
-        // Bersihkan data lama agar tidak bentrok
+        // Bersihkan data log dan feedback lama agar tidak bentrok
         FeedbackItem::truncate();
         ConsultationLog::truncate();
-        Student::truncate();
-        Lecturer::truncate();
-        User::query()->forceDelete();
 
         DB::statement('SET FOREIGN_KEY_CHECKS=1;');
 
         // =========================================================
-        // 1. BUAT AKUN DOSEN
+        // 1. CARI ATAU BUAT AKUN DOSEN
         // =========================================================
-        $dosenUser = User::create([
-            'name'     => 'Dr. Budi Santoso, M.Kom',
-            'email'    => 'dosen@tierlog.demo',
-            'password' => Hash::make('password'),
-            'role'     => 'lecturer',
-        ]);
+        // Prioritas 1: zaky@gmail.com (Dosen Zaky Manggala dari database saat ini)
+        $dosenUser = User::where('email', 'zaky@gmail.com')->first();
+        if ($dosenUser) {
+            $dosenUser->update(['password' => Hash::make('password')]);
+            $lecturer = Lecturer::where('user_id', $dosenUser->id)->first();
+            if (!$lecturer) {
+                $lecturer = Lecturer::create([
+                    'user_id' => $dosenUser->id,
+                    'nip'     => '123456789',
+                    'name'    => 'Zaky Manggala',
+                    'faculty' => 'Teknik Informatika',
+                ]);
+            }
+        } else {
+            // Prioritas 2: dosen1@university.ac.id
+            $dosenUser = User::where('email', 'dosen1@university.ac.id')->first();
+            if ($dosenUser) {
+                $dosenUser->update(['password' => Hash::make('password')]);
+                $lecturer = Lecturer::where('user_id', $dosenUser->id)->first();
+                if (!$lecturer) {
+                    $lecturer = Lecturer::create([
+                        'user_id' => $dosenUser->id,
+                        'nip'     => '198001012005011001',
+                        'name'    => $dosenUser->name ?? 'Dr. Arsitek Go, M.Kom',
+                        'faculty' => 'Informatika',
+                    ]);
+                }
+            } else {
+                // Fallback: dosen@tierlog.demo
+                $dosenUser = User::where('email', 'dosen@tierlog.demo')->first();
+                if (!$dosenUser) {
+                    $dosenUser = User::create([
+                        'name'     => 'Dr. Budi Santoso, M.Kom',
+                        'email'    => 'dosen@tierlog.demo',
+                        'password' => Hash::make('password'),
+                        'role'     => 'lecturer',
+                    ]);
+                } else {
+                    $dosenUser->update(['password' => Hash::make('password')]);
+                }
 
-        $lecturer = Lecturer::create([
-            'user_id' => $dosenUser->id,
-            'nip'     => '198512012010121001',
-            'name'    => 'Dr. Budi Santoso, M.Kom',
-            'keahlian'=> 'Rekayasa Perangkat Lunak',
-            'faculty' => 'Teknik Informatika',
-        ]);
+                $lecturer = Lecturer::where('user_id', $dosenUser->id)->first();
+                if (!$lecturer) {
+                    $lecturer = Lecturer::create([
+                        'user_id' => $dosenUser->id,
+                        'nip'     => '198512012010121001',
+                        'name'    => 'Dr. Budi Santoso, M.Kom',
+                        'faculty' => 'Teknik Informatika',
+                    ]);
+                }
+            }
+        }
 
         // =========================================================
-        // 2. BUAT AKUN MAHASISWA (3 mahasiswa untuk demo yang kaya)
+        // 2. CARI ATAU BUAT AKUN MAHASISWA (3 mahasiswa untuk demo yang kaya)
         // =========================================================
 
-        // Mahasiswa 1 — utama untuk demo realtime
-        $mhs1User = User::create([
-            'name'     => 'Andi Pratama',
-            'email'    => 'mahasiswa@tierlog.demo',
-            'password' => Hash::make('password'),
-            'role'     => 'student',
-        ]);
+        // Mahasiswa 1 — utama untuk demo realtime (budi@gmail.com prioritas utama, lalu mhs1, lalu fallback)
+        $mhs1User = User::where('email', 'budi@gmail.com')->first();
+        if ($mhs1User) {
+            $mhs1User->update(['password' => Hash::make('password')]);
+            $student1 = Student::where('user_id', $mhs1User->id)->first();
+            if (!$student1) {
+                $student1 = Student::create([
+                    'user_id'     => $mhs1User->id,
+                    'lecturer_id' => $lecturer->id,
+                    'nim'         => '123456987',
+                    'name'        => 'Budi',
+                    'prodi'       => 'Informatika',
+                    'thesis_title'=> 'Web jual beli',
+                ]);
+            } else {
+                $student1->update(['lecturer_id' => $lecturer->id]);
+            }
+        } else {
+            $mhs1User = User::where('email', 'mhs1@university.ac.id')->first();
+            if ($mhs1User) {
+                $mhs1User->update(['password' => Hash::make('password')]);
+                $student1 = Student::where('user_id', $mhs1User->id)->first();
+                if (!$student1) {
+                    $student1 = Student::create([
+                        'user_id'     => $mhs1User->id,
+                        'lecturer_id' => $lecturer->id,
+                        'nim'         => '2200010001',
+                        'name'        => 'Budi Mahasiswa',
+                        'prodi'       => 'Teknik Informatika',
+                        'thesis_title'=> 'Implementasi Microservices pada Sistem Log Bimbingan',
+                    ]);
+                } else {
+                    $student1->update(['lecturer_id' => $lecturer->id]);
+                }
+            } else {
+                $mhs1User = User::where('email', 'mahasiswa@tierlog.demo')->first();
+                if (!$mhs1User) {
+                    $mhs1User = User::create([
+                        'name'     => 'Andi Pratama',
+                        'email'    => 'mahasiswa@tierlog.demo',
+                        'password' => Hash::make('password'),
+                        'role'     => 'student',
+                    ]);
+                } else {
+                    $mhs1User->update(['password' => Hash::make('password')]);
+                }
 
-        $student1 = Student::create([
-            'user_id'     => $mhs1User->id,
-            'lecturer_id' => $lecturer->id,
-            'nim'         => '2021001',
-            'name'        => 'Andi Pratama',
-            'prodi'       => 'Teknik Informatika',
-            'thesis_title'=> 'Implementasi Sistem Log Bimbingan Skripsi Berbasis Kecerdasan Buatan Menggunakan Go dan Laravel',
-        ]);
+                $student1 = Student::where('user_id', $mhs1User->id)->first();
+                if (!$student1) {
+                    $student1 = Student::create([
+                        'user_id'     => $mhs1User->id,
+                        'lecturer_id' => $lecturer->id,
+                        'nim'         => '2021001',
+                        'name'        => 'Andi Pratama',
+                        'prodi'       => 'Teknik Informatika',
+                        'thesis_title'=> 'Implementasi Sistem Log Bimbingan Skripsi Berbasis Kecerdasan Buatan Menggunakan Go dan Laravel',
+                    ]);
+                } else {
+                    $student1->update(['lecturer_id' => $lecturer->id]);
+                }
+            }
+        }
 
         // Mahasiswa 2 — variasi data
-        $mhs2User = User::create([
-            'name'     => 'Sari Dewi',
-            'email'    => 'mahasiswa2@tierlog.demo',
-            'password' => Hash::make('password'),
-            'role'     => 'student',
-        ]);
+        $mhs2User = User::where('email', 'mahasiswa2@tierlog.demo')->first();
+        if (!$mhs2User) {
+            $mhs2User = User::create([
+                'name'     => 'Sari Dewi',
+                'email'    => 'mahasiswa2@tierlog.demo',
+                'password' => Hash::make('password'),
+                'role'     => 'student',
+            ]);
+        } else {
+            $mhs2User->update(['password' => Hash::make('password')]);
+        }
 
-        $student2 = Student::create([
-            'user_id'     => $mhs2User->id,
-            'lecturer_id' => $lecturer->id,
-            'nim'         => '2021002',
-            'name'        => 'Sari Dewi',
-            'prodi'       => 'Sistem Informasi',
-            'thesis_title'=> 'Analisis dan Perancangan Sistem Manajemen Inventaris Berbasis Web menggunakan Framework Laravel',
-        ]);
+        $student2 = Student::where('user_id', $mhs2User->id)->first();
+        if (!$student2) {
+            $student2 = Student::create([
+                'user_id'     => $mhs2User->id,
+                'lecturer_id' => $lecturer->id,
+                'nim'         => '2021002',
+                'name'        => 'Sari Dewi',
+                'prodi'       => 'Sistem Informasi',
+                'thesis_title'=> 'Analisis dan Perancangan Sistem Manajemen Inventaris Berbasis Web menggunakan Framework Laravel',
+            ]);
+        }
 
         // =========================================================
         // 3. BUAT LOG KONSULTASI UNTUK MAHASISWA 1 (3 sesi)
@@ -104,6 +193,7 @@ class DemoDataSeeder extends Seeder
         FeedbackItem::insert([
             [
                 'consultation_log_id' => $log1->id,
+                'log_id'              => $log1->id,
                 'content'  => 'Latar belakang penelitian terlalu umum. Perlu dipersempit dan difokuskan pada masalah spesifik yang melatarbelakangi penelitian ini, seperti ketidakefisienan proses bimbingan manual saat ini.',
                 'category' => 'Major',
                 'status'   => 'Fixed',
@@ -112,6 +202,7 @@ class DemoDataSeeder extends Seeder
             ],
             [
                 'consultation_log_id' => $log1->id,
+                'log_id'              => $log1->id,
                 'content'  => 'Rumusan masalah nomor 2 dan 3 masih kurang terukur. Gunakan kata kerja yang konkret seperti "bagaimana merancang", bukan "apakah sistem dapat".',
                 'category' => 'Major',
                 'status'   => 'Fixed',
@@ -120,6 +211,7 @@ class DemoDataSeeder extends Seeder
             ],
             [
                 'consultation_log_id' => $log1->id,
+                'log_id'              => $log1->id,
                 'content'  => 'Format daftar pustaka tidak konsisten. Beberapa menggunakan APA, beberapa IEEE. Standarisasi seluruhnya ke format APA edisi ke-7.',
                 'category' => 'Minor',
                 'status'   => 'Fixed',
@@ -142,6 +234,7 @@ class DemoDataSeeder extends Seeder
         FeedbackItem::insert([
             [
                 'consultation_log_id' => $log2->id,
+                'log_id'              => $log2->id,
                 'content'  => 'Landasan teori perlu menyertakan minimal 2 referensi akademik yang valid untuk setiap konsep yang disebutkan. Pastikan referensi yang digunakan adalah jurnal atau buku yang terbit dalam 10 tahun terakhir.',
                 'category' => 'Major',
                 'status'   => 'Fixed',
@@ -150,6 +243,7 @@ class DemoDataSeeder extends Seeder
             ],
             [
                 'consultation_log_id' => $log2->id,
+                'log_id'              => $log2->id,
                 'content'  => 'Tambahkan bagian Penelitian Terdahulu berisi minimal 5 penelitian relevan dalam format tabel perbandingan (Penulis, Tahun, Judul, Metode, Hasil, Perbedaan dengan penelitian ini).',
                 'category' => 'Major',
                 'status'   => 'Pending',
@@ -158,6 +252,7 @@ class DemoDataSeeder extends Seeder
             ],
             [
                 'consultation_log_id' => $log2->id,
+                'log_id'              => $log2->id,
                 'content'  => 'Diagram arsitektur sistem terlalu sederhana. Gambarkan interaksi antar komponen (Go Backend, Laravel Frontend, MySQL, AI Provider) secara lebih detail menggunakan diagram komponen UML.',
                 'category' => 'Major',
                 'status'   => 'Pending',
@@ -166,6 +261,7 @@ class DemoDataSeeder extends Seeder
             ],
             [
                 'consultation_log_id' => $log2->id,
+                'log_id'              => $log2->id,
                 'content'  => 'Typo pada halaman 12: "implementsi" seharusnya "implementasi". Cek ulang ejaan secara menyeluruh sebelum pengumpulan berikutnya.',
                 'category' => 'Minor',
                 'status'   => 'Fixed',
@@ -188,6 +284,7 @@ class DemoDataSeeder extends Seeder
         FeedbackItem::insert([
             [
                 'consultation_log_id' => $log3->id,
+                'log_id'              => $log3->id,
                 'content'  => 'Metode pengembangan sistem Waterfall tidak cocok untuk penelitian iteratif ini. Ganti dengan metodologi Agile/Scrum dan jelaskan tahapan sprint yang akan digunakan beserta target deliverable setiap sprint.',
                 'category' => 'Major',
                 'status'   => 'Pending',
@@ -196,6 +293,7 @@ class DemoDataSeeder extends Seeder
             ],
             [
                 'consultation_log_id' => $log3->id,
+                'log_id'              => $log3->id,
                 'content'  => 'Diagram alir penelitian belum mencakup fase pengujian (User Acceptance Testing/UAT). Tambahkan tahap UAT yang menjelaskan siapa penguji, skenario pengujian, dan kriteria penerimaan sistem.',
                 'category' => 'Major',
                 'status'   => 'Pending',
@@ -204,6 +302,7 @@ class DemoDataSeeder extends Seeder
             ],
             [
                 'consultation_log_id' => $log3->id,
+                'log_id'              => $log3->id,
                 'content'  => 'Instrumen penelitian (kuesioner, checklist pengujian fungsional) belum terlampir di bagian lampiran. Buat dan lampirkan minimal 1 instrumen pengujian yang sesuai dengan tujuan penelitian.',
                 'category' => 'Major',
                 'status'   => 'Pending',
@@ -212,6 +311,7 @@ class DemoDataSeeder extends Seeder
             ],
             [
                 'consultation_log_id' => $log3->id,
+                'log_id'              => $log3->id,
                 'content'  => 'Tambahkan sub-bab yang menjelaskan populasi dan sampel penelitian, termasuk teknik pengambilan sampel yang digunakan (purposive sampling, random sampling, dll).',
                 'category' => 'Minor',
                 'status'   => 'Pending',
@@ -236,6 +336,7 @@ class DemoDataSeeder extends Seeder
         FeedbackItem::insert([
             [
                 'consultation_log_id' => $log4->id,
+                'log_id'              => $log4->id,
                 'content'  => 'Judul penelitian terlalu panjang (38 kata). Sederhanakan menjadi maksimal 20 kata yang tetap mencerminkan isi penelitian secara informatif dan padat.',
                 'category' => 'Minor',
                 'status'   => 'Pending',
@@ -244,6 +345,7 @@ class DemoDataSeeder extends Seeder
             ],
             [
                 'consultation_log_id' => $log4->id,
+                'log_id'              => $log4->id,
                 'content'  => 'Analisis sistem yang berjalan membutuhkan diagram UML yang lengkap: Use Case Diagram, Activity Diagram, dan Sequence Diagram. Diagram harus dibuat menggunakan tools standar (Lucidchart, Draw.io) bukan sketsa tangan.',
                 'category' => 'Major',
                 'status'   => 'Pending',
@@ -252,6 +354,7 @@ class DemoDataSeeder extends Seeder
             ],
             [
                 'consultation_log_id' => $log4->id,
+                'log_id'              => $log4->id,
                 'content'  => 'Tambahkan justifikasi pemilihan framework Laravel dibandingkan alternatif lain (CodeIgniter, Symfony, Lumen). Jelaskan kelebihan Laravel yang relevan dengan kebutuhan proyek ini.',
                 'category' => 'Minor',
                 'status'   => 'Fixed',
@@ -261,16 +364,16 @@ class DemoDataSeeder extends Seeder
         ]);
 
         $this->command->info('');
-        $this->command->info('✅ Demo data berhasil dibuat!');
+        $this->command->info('✅ Demo data berhasil disinkronkan!');
         $this->command->info('');
-        $this->command->info('📋 Kredensial Login Demo:');
+        $this->command->info('📋 Kredensial Login Demo (Prioritas Akun Aktif / SQL Dump):');
         $this->command->info('');
         $this->command->info('  🎓 DOSEN (Lecturer)');
-        $this->command->info('     Email   : dosen@tierlog.demo');
+        $this->command->info('     Email   : zaky@gmail.com (atau dosen1@university.ac.id / dosen@tierlog.demo)');
         $this->command->info('     Password: password');
         $this->command->info('');
-        $this->command->info('  👨‍🎓 MAHASISWA 1 (Student - Andi Pratama)');
-        $this->command->info('     Email   : mahasiswa@tierlog.demo');
+        $this->command->info('  👨‍🎓 MAHASISWA 1 (Student - Budi / Andi Pratama)');
+        $this->command->info('     Email   : budi@gmail.com (atau mhs1@university.ac.id / mahasiswa@tierlog.demo)');
         $this->command->info('     Password: password');
         $this->command->info('');
         $this->command->info('  👩‍🎓 MAHASISWA 2 (Student - Sari Dewi)');
@@ -278,10 +381,8 @@ class DemoDataSeeder extends Seeder
         $this->command->info('     Password: password');
         $this->command->info('');
         $this->command->info('📂 Data yang telah dibuat:');
-        $this->command->info('   - 1 Dosen Pembimbing');
-        $this->command->info('   - 2 Mahasiswa Bimbingan');
-        $this->command->info('   - 4 Log Konsultasi (3 untuk Andi, 1 untuk Sari)');
-        $this->command->info('   - 14 Feedback Item (campuran Major/Minor, Pending/Fixed)');
+        $this->command->info('   - Log Bimbingan dan revisi berhasil dipetakan ke mahasiswa di atas!');
+        $this->command->info('   - 4 Log Bimbingan & 14 Feedback Item ditambahkan.');
         $this->command->info('');
         $this->command->info('💡 Untuk chat Oracle, login sebagai Mahasiswa dan pilih Sesi 3 (Metodologi)');
         $this->command->info('   yang memiliki 4 feedback Pending baru dari 3 hari lalu.');

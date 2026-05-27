@@ -79,13 +79,13 @@ onMounted(() => {
 
                     <!-- Hero Stats -->
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <!-- Master Mind Node -->
+                        <!-- Sovereign AI Gateway Node -->
                         <div class="bg-indigo-600 rounded-4xl p-6 text-white shadow-2xl shadow-indigo-500/40 relative overflow-hidden group border border-white/20">
                             <div class="absolute -right-4 -bottom-4 text-white/10 text-6xl font-black group-hover:scale-110 transition-transform duration-500">AI</div>
                             <div class="relative z-10">
-                                <p class="text-xs font-bold uppercase tracking-widest opacity-70">Master Mind Grade</p>
+                                <p class="text-xs font-bold uppercase tracking-widest opacity-70">AI Gateway Status</p>
                                 <h3 class="text-3xl font-black mt-2 tracking-tighter">
-                                    {{ stats.completion_rate > 80 ? 'OPTIMAL' : (stats.completion_rate > 40 ? 'SYNERGY' : 'INITIAL') }}
+                                    {{ stats.completion_rate > 80 ? 'OPTIMAL' : (stats.completion_rate > 40 ? 'SYNERGY' : 'CONNECTED') }}
                                 </h3>
                                 <div class="mt-4 pt-4 border-t border-white/10 flex items-center gap-3">
                                     <div class="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center">
@@ -143,7 +143,7 @@ onMounted(() => {
                             
                             <div class="relative z-10">
                                 <span class="inline-block px-3 py-1 bg-indigo-500/20 border border-indigo-500/30 rounded-full text-[10px] font-black tracking-[0.2em] text-indigo-400 uppercase mb-4">Neural Interface Ready</span>
-                                <h2 class="text-4xl font-black mb-4 tracking-tighter">Start Exploring <span class="italic text-indigo-500">Master Mind</span></h2>
+                                <h2 class="text-4xl font-black mb-4 tracking-tighter">Start Exploring <span class="italic text-indigo-500">AI Oracle</span></h2>
                                 <p class="text-slate-400 max-w-md text-lg leading-relaxed mb-10">
                                     Real-time audio transcription and paper draft analysis with Gemini 2.0 Flash Core accuracy.
                                 </p>
@@ -177,16 +177,16 @@ onMounted(() => {
                             <div class="space-y-4 flex-1 overflow-y-auto max-h-[420px] pr-2 custom-scrollbar relative z-10">
                                 <div v-if="stats.upcoming_quests.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
                                     <div class="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mb-4 border border-white/5">
-                                        <svg class="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        <svg class="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                     </div>
                                     <p class="text-slate-500 text-xs font-black uppercase tracking-[0.2em]">All Quests Completed</p>
-                                    <p class="text-[10px] text-slate-600 mt-2 font-bold uppercase tracking-widest">Master Mind is Satisfied</p>
+                                    <p class="text-[10px] text-slate-600 mt-2 font-bold uppercase tracking-widest">Oracle is Satisfied</p>
                                 </div>
                                 
                                 <div 
                                     v-for="quest in stats.upcoming_quests" 
                                     :key="quest.id"
-                                    class="p-5 bg-white/3 border border-white/5 rounded-3xl hover:border-indigo-500/40 hover:bg-white/5 transition-all duration-300 cursor-pointer group/quest relative overflow-hidden"
+                                    class="p-5 bg-white/5 border border-white/5 rounded-3xl hover:border-indigo-500/40 hover:bg-white/5 transition-all duration-300 cursor-pointer group/quest relative overflow-hidden"
                                 >
                                     <div class="absolute top-0 left-0 w-1 h-full" :class="quest.category === 'Major' ? 'bg-red-500' : 'bg-indigo-500'"></div>
                                     <div class="flex flex-col gap-3">
@@ -215,7 +215,7 @@ onMounted(() => {
                         <div class="lg:col-span-3 bg-white/5 border border-white/10 rounded-[2.5rem] p-8">
                             <div class="flex items-center justify-between mb-6">
                                 <h3 class="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Activity Heatmap</h3>
-                                <span class="text-[10px] text-indigo-400 font-bold uppercase tracking-widest">Master Mind Active: 12 Days</span>
+                                <span class="text-[10px] text-indigo-400 font-bold uppercase tracking-widest">AI Gateway Active: 12 Days</span>
                             </div>
                             <div class="flex flex-wrap gap-2">
                                 <div v-for="i in 56" :key="i" 

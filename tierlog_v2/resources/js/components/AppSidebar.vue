@@ -56,7 +56,7 @@ const mainNavItems = computed<NavItem[]>(() => {
                     <div class="flex items-center gap-3 px-2 py-2">
                         <Link :href="dashboard()" class="flex items-center gap-3 group transition-all">
                             <div class="p-2 bg-indigo-600/20 border border-indigo-500/30 rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.2)] group-hover:shadow-[0_0_20px_rgba(79,70,229,0.4)] transition-all">
-                                <span class="text-xl">🧠</span>
+                                <span class="text-xl" aria-hidden="true">🧠</span>
                             </div>
                             <div class="flex flex-col">
                                 <span class="text-sm font-black tracking-tighter text-white uppercase group-hover:text-indigo-400 transition-colors">TierLog</span>

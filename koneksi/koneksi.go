@@ -2,6 +2,7 @@ package koneksi
 
 import (
 	"fmt"
+	"os"
 	"testing_go/models"
 
 	"gorm.io/driver/mysql"	
@@ -12,11 +13,24 @@ var DB *gorm.DB
 
 func ConnectDatabase() {
 
-	user := "root"
-	password := ""
-	host := "127.0.0.1"
-	port := "3306"
-	dbname := "struct_go"
+	// Load database configurations from environment variables (loaded by godotenv in main.go)
+	user := os.Getenv("DB_USERNAME")
+	if user == "" {
+		user = "root"
+	}
+	password := os.Getenv("DB_PASSWORD")
+	host := os.Getenv("DB_HOST")
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	port := os.Getenv("DB_PORT")
+	if port == "" {
+		port = "3306"
+	}
+	dbname := os.Getenv("DB_DATABASE")
+	if dbname == "" {
+		dbname = "struct_go"
+	}
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", user, password, host, port, dbname)
 	database, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})

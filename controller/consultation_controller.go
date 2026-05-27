@@ -42,7 +42,7 @@ func CreateConsultation(c *gin.Context) {
 	timestamp := time.Now().UnixNano()
 	
 	// Save .mp3 directly to storage/audio/
-	audioFilename := fmt.Sprintf("%d_%s", timestamp, audioFile.Filename)
+	audioFilename := fmt.Sprintf("%d_%s", timestamp, filepath.Base(audioFile.Filename))
 	audioPath := filepath.Join("storage", "audio", audioFilename)
 	if err := c.SaveUploadedFile(audioFile, audioPath); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save audio file"})
@@ -55,7 +55,7 @@ func CreateConsultation(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Paper file (.docx) is required"})
 		return
 	}
-	paperFilename := fmt.Sprintf("%d_%s", timestamp, paperFile.Filename)
+	paperFilename := fmt.Sprintf("%d_%s", timestamp, filepath.Base(paperFile.Filename))
 	paperPath := filepath.Join("storage", "paper", paperFilename)
 	if err := c.SaveUploadedFile(paperFile, paperPath); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save paper file"})
@@ -92,7 +92,9 @@ func CreateConsultation(c *gin.Context) {
 	// 3. Save Transcript to Disk for redundancy
 	transcriptFilename := fmt.Sprintf("%d_transcript.txt", timestamp)
 	transcriptPath := filepath.Join("storage", "transcript", transcriptFilename)
-	_ = os.WriteFile(transcriptPath, []byte(transcriptContent), 0644)
+	if err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0644); err != nil {
+		fmt.Printf("Warning: Failed to write transcript file: %v\n", err)
+	}
 
 	// 4. Save Log and Feedback Items
 	log := models.ConsultationLog{

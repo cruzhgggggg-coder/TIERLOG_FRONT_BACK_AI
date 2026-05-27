@@ -301,31 +301,50 @@ func callAnthropic(apiKey, model, systemPrompt, userPrompt string) (string, erro
 }
 
 func callAI(user *models.User, systemPrompt, userPrompt string, isJSON bool) (string, error) {
-	provider := strings.ToLower(os.Getenv("AI_PROVIDER"))
+	if user == nil {
+		return "", errors.New("Sistem memerlukan pengguna yang valid untuk memanggil AI.")
+	}
+
+	provider := ""
 	model := ""
 	apiKey := ""
 
-	// AI Gateway Logic: Override if user has keys (Bypassed IsGatewayActive check for testing)
-	if user != nil {
-		if user.PreferredModel != "" && user.PreferredModel != "default" {
-			parts := strings.Split(user.PreferredModel, ":")
-			if len(parts) == 2 {
-				provider = strings.ToLower(parts[0])
-				model = parts[1]
-			}
+	// Check if user has a configured preferred model
+	if user.PreferredModel != "" && user.PreferredModel != "default" && user.PreferredModel != "none" {
+		parts := strings.Split(user.PreferredModel, ":")
+		if len(parts) == 2 {
+			provider = strings.ToLower(parts[0])
+			model = parts[1]
 		}
+	}
 
-		// Pick the right key
-		switch provider {
-		case "openai":
-			apiKey = user.OpenAIKey
-		case "nvidia":
-			apiKey = user.NvidiaKey
-		case "gemini":
-			apiKey = user.GeminiKey
-		case "anthropic":
-			apiKey = user.AnthropicKey
+	// If no preferred model is set, fallback to the first connected key in our list
+	if provider == "" {
+		if user.OpenAIKey != "" {
+			provider = "openai"
+		} else if user.GeminiKey != "" {
+			provider = "gemini"
+		} else if user.AnthropicKey != "" {
+			provider = "anthropic"
+		} else if user.NvidiaKey != "" {
+			provider = "nvidia"
 		}
+	}
+
+	// Retrieve corresponding key
+	switch provider {
+	case "openai":
+		apiKey = user.OpenAIKey
+	case "nvidia":
+		apiKey = user.NvidiaKey
+	case "gemini":
+		apiKey = user.GeminiKey
+	case "anthropic":
+		apiKey = user.AnthropicKey
+	}
+
+	if apiKey == "" {
+		return "", errors.New("AI Gateway tidak aktif. Silakan hubungkan API Key pribadi Anda di menu Settings -> AI Gateway terlebih dahulu.")
 	}
 
 	switch provider {
@@ -334,13 +353,11 @@ func callAI(user *models.User, systemPrompt, userPrompt string, isJSON bool) (st
 	case "anthropic":
 		return callAnthropic(apiKey, model, systemPrompt, userPrompt)
 	case "openai":
-		// We can reuse NVIDIA logic for OpenAI as it's compatible
 		return callOpenAI(apiKey, model, systemPrompt, userPrompt, isJSON)
 	case "nvidia":
 		return callNVIDIA(apiKey, model, systemPrompt, userPrompt, isJSON)
 	default:
-		// Default to system NVIDIA
-		return callNVIDIA("", "", systemPrompt, userPrompt, isJSON)
+		return "", fmt.Errorf("Provider AI '%s' tidak didukung atau tidak terkonfigurasi.", provider)
 	}
 }
 
@@ -556,6 +573,9 @@ func GenerateRevisionAssistance(logID uint64, studentQuery string, modelOverride
 	finalSystemPrompt = strings.ReplaceAll(finalSystemPrompt, transcriptPlaceholder, log.TranscriptText)
 
 	// Apply model override if provided
+	if log.Student == nil || log.Student.User == nil {
+		return "", errors.New("GUARDED: Profil atau akun mahasiswa tidak valid atau tidak ditemukan.")
+	}
 	user := log.Student.User
 	if modelOverride != "" && modelOverride != "default" {
 		user.PreferredModel = modelOverride

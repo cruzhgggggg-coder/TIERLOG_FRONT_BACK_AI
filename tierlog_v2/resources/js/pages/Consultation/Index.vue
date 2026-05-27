@@ -1,8 +1,6 @@
 <script setup>
 import { Head, useForm } from '@inertiajs/vue3';
 import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue';
-import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller';
-import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
 
 import axios from 'axios';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -26,6 +24,15 @@ const isProcessing = ref(false);
 const processingStep = ref(0);
 const uploadProgress = ref(0);
 
+const hasConnectedKeys = computed(() => {
+    return !!(
+        props.auth.user.openai_key ||
+        props.auth.user.gemini_key ||
+        props.auth.user.anthropic_key ||
+        props.auth.user.nvidia_key
+    );
+});
+
 const steps = [
     "Initializing Gemini 2.0 Flash Core...",
     "Establishing Neural Link with Audio Stream...",
@@ -33,10 +40,15 @@ const steps = [
     "Extracting HOC (Substantial) Feedback...",
     "Extracting LOC (Technical) Feedback...",
     "Calibrating Guarded AI Assistant...",
-    "Finalizing Master Mind Status..."
+    "Finalizing AI Oracle Status..."
 ];
 
 const submit = async () => {
+    if (!hasConnectedKeys.value) {
+        toast.error('AI Gateway belum dikonfigurasi. Silakan hubungkan API Key Anda terlebih dahulu di menu Settings -> AI Gateway.');
+        return;
+    }
+
     if (!form.paper || !form.audio) {
         toast.error('Please select a document (.docx) and an audio recording before syncing.');
         return;
@@ -140,6 +152,11 @@ onMounted(() => {
 });
 
 const askAI = async () => {
+    if (!hasConnectedKeys.value) {
+        toast.error('AI Gateway belum dikonfigurasi. Silakan hubungkan API Key Anda terlebih dahulu di menu Settings -> AI Gateway.');
+        return;
+    }
+
     if (!selectedLog.value || !chatQuery.value) return;
     
     const userMessage = chatQuery.value;
@@ -160,7 +177,7 @@ const askAI = async () => {
         });
     } catch (e) {
         console.error(e);
-        const errorMsg = e.response?.data?.message || e.response?.data?.error || 'An error occurred while contacting Master Mind.';
+        const errorMsg = e.response?.data?.message || e.response?.data?.error || 'An error occurred while contacting AI Oracle.';
         chatHistory.value.push({ role: 'system', content: errorMsg });
     } finally {
         isChatting.value = false;
@@ -172,7 +189,7 @@ const currentChannel = ref(null);
 const selectLog = (log) => {
     selectedLog.value = log;
     chatHistory.value = [
-        { role: 'system', content: `Master Mind active for session: ${log.paper_filename}. Ask anything about your revision.` }
+        { role: 'system', content: `AI Oracle active for session: ${log.paper_filename}. Ask anything about your revision.` }
     ];
 
     // Join Echo channel for real-time updates
@@ -238,7 +255,7 @@ const isNeuralSyncing = ref(false);
 const askAIContextual = async (item) => {
     isNeuralSyncing.value = true;
     const context = item.category === 'HOC' ? 'Higher Order (Struktural)' : 'Lower Order (Teknis)';
-    chatQuery.value = `[CONTRADICTION DETECTED] I need help with this ${context} feedback: "${item.content}". What does Master Mind suggest to fix this?`;
+    chatQuery.value = `[CONTRADICTION DETECTED] I need help with this ${context} feedback: "${item.content}". What does the AI Oracle suggest to fix this?`;
     
     // Smooth transition to chat
     await nextTick();
@@ -269,10 +286,10 @@ watch(chatHistory, () => {
 </script>
 
 <template>
-    <Head title="Konsultasi AI - Master Mind" />
+    <Head title="Konsultasi AI - Oracle Workspace" />
 
     <AppLayout>
-        <div class="relative min-h-screen bg-[#050507] text-white overflow-hidden">
+        <div class="relative min-h-screen bg-[#050507] text-white lg:overflow-hidden flex flex-col">
             <!-- Neural Link Overlay -->
             <transition name="fade">
                 <div v-if="isProcessing" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#050507]/95 backdrop-blur-xl">
@@ -283,7 +300,7 @@ watch(chatHistory, () => {
                     <div class="relative z-10 flex flex-col items-center">
                         <div class="relative w-48 h-48 mb-12">
                             <div class="absolute inset-0 border-2 border-indigo-500/30 rounded-full animate-ping"></div>
-                            <div class="absolute inset-4 border-2 border-purple-500/20 rounded-full animate-ping [animation-delay:0.5s]"></div>
+                            <div class="absolute inset-4 border-2 border-purple-500/20 rounded-full animate-ping" style="animation-delay: 0.5s;"></div>
                             <div class="absolute inset-0 flex items-center justify-center">
                                 <div class="w-24 h-24 bg-linear-to-br from-indigo-600 to-purple-600 rounded-full shadow-[0_0_50px_rgba(79,70,229,0.5)] flex items-center justify-center">
                                     <span class="text-4xl animate-bounce">🧠</span>
@@ -314,7 +331,7 @@ watch(chatHistory, () => {
                 </div>
             </transition>
 
-            <div class="max-w-[1600px] mx-auto p-6 lg:p-10 h-screen flex flex-col">
+            <div class="max-w-[1600px] w-full mx-auto p-6 lg:p-10 min-h-screen lg:h-screen flex flex-col overflow-y-auto lg:overflow-hidden">
                 <!-- Top Navigation & Header -->
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                     <div>
@@ -328,14 +345,31 @@ watch(chatHistory, () => {
                     <div class="flex items-center gap-4">
                         <div class="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
                             <span class="w-1.5 h-1.5 bg-[#00f2ff] rounded-full animate-pulse shadow-[0_0_8px_#00f2ff]"></span>
-                            Master Mind v2.0
+                            AI Oracle Gateway
                         </div>
                     </div>
                 </div>
 
-                <div class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 overflow-hidden">
+                <!-- Premium Sovereign AI Gateway Locked Warning Banner -->
+                <div v-if="!hasConnectedKeys" class="bg-indigo-600/10 border border-indigo-500/30 rounded-3xl p-6 mb-8 flex items-start gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+                    <div class="p-3 bg-indigo-600 rounded-2xl text-white shadow-lg shadow-indigo-500/20">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-black text-white">AI Gateway Belum Dikonfigurasi</h3>
+                        <p class="text-sm text-slate-400 mt-1">
+                            Sistem AI default (Master Mind) dinonaktifkan. Anda harus menghubungkan API Key pribadi Anda di menu 
+                            <a href="/settings/ai-gateway" class="text-indigo-400 font-bold hover:underline">Settings -> AI Gateway</a> 
+                            terlebih dahulu sebelum dapat mengunggah draf skripsi atau melakukan konsultasi interaktif dengan Oracle.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 overflow-y-auto lg:overflow-hidden min-h-0">
                     <!-- Column 1: Control Center (3/12) -->
-                    <div class="lg:col-span-3 flex flex-col gap-6 overflow-y-auto pr-2 custom-scrollbar">
+                    <div class="lg:col-span-3 flex flex-col gap-6 overflow-y-auto pr-2 custom-scrollbar lg:max-h-full">
                         <!-- Upload Card -->
                         <div class="neural-glass p-8 relative overflow-hidden group">
                             <div class="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-30 transition-opacity">
@@ -349,16 +383,16 @@ watch(chatHistory, () => {
                             
                             <form @submit.prevent="submit" class="space-y-6">
                                 <div class="space-y-4">
-                                    <label class="group/upload block relative cursor-pointer">
-                                        <input type="file" @input="form.paper = $event.target.files[0]" class="hidden" accept=".docx" />
+                                    <label class="group/upload block relative cursor-pointer" :class="{'pointer-events-none opacity-25': !hasConnectedKeys}">
+                                        <input type="file" @input="form.paper = $event.target.files[0]" class="hidden" accept=".docx" :disabled="!hasConnectedKeys" />
                                         <div class="border border-white/5 rounded-2xl p-6 text-center hover:bg-white/5 transition-all duration-300 group-hover/upload:border-[#00f2ff]/30">
                                             <span class="text-2xl mb-2 block filter grayscale group-hover/upload:grayscale-0 transition-all">📄</span>
                                             <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">{{ form.paper ? form.paper.name : 'Select Manuscript' }}</p>
                                         </div>
                                     </label>
                                     
-                                    <label class="group/upload block relative cursor-pointer">
-                                        <input type="file" @input="form.audio = $event.target.files[0]" class="hidden" accept="audio/*" />
+                                    <label class="group/upload block relative cursor-pointer" :class="{'pointer-events-none opacity-25': !hasConnectedKeys}">
+                                        <input type="file" @input="form.audio = $event.target.files[0]" class="hidden" accept="audio/*" :disabled="!hasConnectedKeys" />
                                         <div class="border border-white/5 rounded-2xl p-6 text-center hover:bg-white/5 transition-all duration-300 group-hover/upload:border-[#ff00ea]/30">
                                             <span class="text-2xl mb-2 block filter grayscale group-hover/upload:grayscale-0 transition-all">🎙️</span>
                                             <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">{{ form.audio ? form.audio.name : 'Select Recording' }}</p>
@@ -368,7 +402,8 @@ watch(chatHistory, () => {
                                 
                                 <button 
                                     type="submit" 
-                                    class="w-full bg-white text-black py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-[#00f2ff] transition-all active:scale-95 flex items-center justify-center gap-3 shadow-[0_20px_40px_rgba(0,0,0,0.4)]"
+                                    :disabled="!hasConnectedKeys"
+                                    class="w-full bg-white text-black py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-[#00f2ff] transition-all active:scale-95 flex items-center justify-center gap-3 shadow-[0_20px_40px_rgba(0,0,0,0.4)] disabled:opacity-35 disabled:pointer-events-none"
                                 >
                                     <span>Sync Neural Link</span>
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
@@ -377,7 +412,7 @@ watch(chatHistory, () => {
                         </div>
 
                         <!-- History List -->
-                        <div class="flex-1 min-h-0 flex flex-col">
+                        <div class="flex-1 min-h-0 flex flex-col max-h-[300px] lg:max-h-full">
                             <h3 class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-6 flex items-center gap-3 px-2">
                                 <span class="w-1 h-4 bg-[#ff00ea] rounded-full shadow-[0_0_10px_#ff00ea]"></span>
                                 Archive
@@ -410,7 +445,7 @@ watch(chatHistory, () => {
                                 </div>
                                 <div class="w-32 h-32 mb-10 relative z-10">
                                     <div class="absolute inset-0 border-t border-cyan-400 rounded-full animate-spin"></div>
-                                    <div class="absolute inset-4 border-b border-fuchsia-400 rounded-full animate-spin animation-duration-[2s]"></div>
+                                    <div class="absolute inset-4 border-b border-fuchsia-400 rounded-full animate-spin" style="animation-duration: 2s;"></div>
                                     <div class="absolute inset-0 flex items-center justify-center text-3xl filter drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]">🧠</div>
                                 </div>
                                 <div class="text-center relative z-10">
@@ -442,99 +477,91 @@ watch(chatHistory, () => {
                                 </div>
                             </div>
 
-                            <div class="flex-1 overflow-hidden">
-                                <DynamicScroller
+                            <div class="flex-1 overflow-hidden relative">
+                                <div
                                     v-if="activeTab === 'feedback' && allFeedback.length"
-                                    :items="allFeedback"
-                                    :min-item-size="100"
-                                    class="h-full pr-4 custom-scrollbar"
-                                    key-field="id"
+                                    class="h-full overflow-y-auto pr-4 custom-scrollbar flex flex-col gap-6"
                                 >
-                                    <template v-slot="{ item, index, active }">
-                                        <DynamicScrollerItem
-                                            :item="item"
-                                            :active="active"
-                                            :size-dependencies="[item.content]"
-                                            :data-index="index"
-                                            class="mb-6"
-                                        >
-                                            <div 
-                                                :class="[
-                                                    'p-6 rounded-3xl border transition-all relative overflow-hidden group bg-zinc-900/50',
-                                                    item.type === 'hoc' ? 'border-white/5' : 'border-white/5'
-                                                ]"
-                                            >
-                                                <!-- Category & Status Badges -->
-                                                <div class="flex items-center justify-between mb-4">
-                                                    <div class="flex items-center gap-3">
-                                                        <span :class="['w-2 h-2 rounded-full shadow-lg', item.type === 'hoc' ? 'bg-fuchsia-400 shadow-fuchsia-400/50' : 'bg-cyan-400 shadow-cyan-400/50']"></span>
-                                                        <span class="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
-                                                            {{ item.type === 'hoc' ? 'Structural logic :: HOC' : 'Technical precision :: LOC' }}
-                                                        </span>
-                                                    </div>
-                                                    <span :class="[
-                                                        'px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tighter border transition-all duration-300 backdrop-blur-xs',
-                                                        item.status === 'Validated' ? 'bg-green-500/10 text-green-400 border-green-500/20 shadow-[0_0_10px_rgba(34,197,94,0.1)]' :
-                                                        item.status === 'Fixed' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20 shadow-[0_0_10px_rgba(234,179,8,0.1)]' :
-                                                        'bg-rose-500/10 text-rose-400 border-rose-500/20 shadow-[0_0_10px_rgba(244,63,94,0.1)]'
-                                                    ]">
-                                                        {{ item.status || 'Pending' }}
-                                                    </span>
-                                                </div>
-
-                                                <div class="flex justify-between gap-6">
-                                                    <p class="text-[13px] leading-relaxed text-slate-300 font-medium">{{ item.content }}</p>
-                                                    <div class="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
-                                                        <button 
-                                                            @click="askAIContextual(item)"
-                                                            class="p-2.5 rounded-xl transition-all hover:scale-110 active:scale-90 shadow-xl relative overflow-hidden"
-                                                            :class="[
-                                                                item.type === 'hoc' ? 'bg-fuchsia-400/10 text-fuchsia-400 border border-fuchsia-400/20' : 'bg-cyan-400/10 text-cyan-400 border border-cyan-400/20',
-                                                                isNeuralSyncing ? 'animate-pulse' : ''
-                                                            ]"
-                                                            :disabled="isNeuralSyncing"
-                                                            title="Analyze with Oracle"
-                                                        >
-                                                            <svg v-if="!isNeuralSyncing" xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                                            </svg>
-                                                            <div v-else class="w-4.5 h-4.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                                                        </button>
-
-                                                        <!-- Mark as Fixed (shown when Pending) -->
-                                                        <button 
-                                                            v-if="item.status === 'Pending' || !item.status"
-                                                            @click="updateStatus(item.id, 'Fixed')"
-                                                            class="p-2.5 rounded-xl transition-all hover:scale-110 active:scale-90 shadow-xl relative overflow-hidden bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
-                                                            title="Mark as Fixed"
-                                                        >
-                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
-                                                            </svg>
-                                                        </button>
-
-                                                        <!-- Undo to Pending (shown when Fixed, before Validated) -->
-                                                        <button 
-                                                            v-if="item.status === 'Fixed'"
-                                                            @click="updateStatus(item.id, 'Pending')"
-                                                            class="p-2.5 rounded-xl transition-all hover:scale-110 active:scale-90 shadow-xl relative overflow-hidden bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                                                            title="Undo — Kembalikan ke Pending"
-                                                        >
-                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                                                            </svg>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                
-                                                <!-- Decorative Synapse Line -->
-                                                <div class="absolute bottom-0 left-0 h-[2px] w-0 group-hover:w-full transition-all duration-1000 ease-out"
-                                                    :class="item.type === 'hoc' ? 'bg-linear-to-r from-transparent via-fuchsia-400 to-transparent' : 'bg-linear-to-r from-transparent via-cyan-400 to-transparent'"
-                                                ></div>
+                                    <div 
+                                        v-for="(item, index) in allFeedback" 
+                                        :key="item.id"
+                                        :class="[
+                                            'p-6 rounded-3xl border transition-all relative overflow-hidden group bg-zinc-900/50',
+                                            item.type === 'hoc' ? 'border-white/5' : 'border-white/5'
+                                        ]"
+                                    >
+                                        <!-- Category & Status Badges -->
+                                        <div class="flex items-center justify-between mb-4">
+                                            <div class="flex items-center gap-3">
+                                                <span :class="['w-2 h-2 rounded-full shadow-lg', item.type === 'hoc' ? 'bg-fuchsia-400 shadow-fuchsia-400/50' : 'bg-cyan-400 shadow-cyan-400/50']"></span>
+                                                <span class="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
+                                                    {{ item.type === 'hoc' ? 'Structural logic :: HOC' : 'Technical precision :: LOC' }}
+                                                </span>
                                             </div>
-                                        </DynamicScrollerItem>
-                                    </template>
-                                </DynamicScroller>
+                                            <span :class="[
+                                                'px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tighter border transition-all duration-300 backdrop-blur-sm',
+                                                item.status === 'Validated' ? 'bg-green-500/10 text-green-400 border-green-500/20 shadow-[0_0_10px_rgba(34,197,94,0.1)]' :
+                                                item.status === 'Fixed' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20 shadow-[0_0_10px_rgba(234,179,8,0.1)]' :
+                                                'bg-rose-500/10 text-rose-400 border-rose-500/20 shadow-[0_0_10px_rgba(244,63,94,0.1)]'
+                                            ]">
+                                                {{ item.status || 'Pending' }}
+                                            </span>
+                                        </div>
+
+                                        <div class="flex justify-between gap-6">
+                                            <p class="text-[13px] leading-relaxed text-slate-300 font-medium">{{ item.content }}</p>
+                                            <div class="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
+                                                <button 
+                                                    @click="askAIContextual(item)"
+                                                    class="p-2.5 rounded-xl transition-all hover:scale-110 active:scale-90 shadow-xl relative overflow-hidden"
+                                                    :class="[
+                                                        item.type === 'hoc' ? 'bg-fuchsia-400/10 text-fuchsia-400 border border-fuchsia-400/20' : 'bg-cyan-400/10 text-cyan-400 border border-cyan-400/20',
+                                                        isNeuralSyncing ? 'animate-pulse' : ''
+                                                    ]"
+                                                    :disabled="isNeuralSyncing"
+                                                    aria-label="Analyze with Oracle"
+                                                    title="Analyze with Oracle"
+                                                >
+                                                    <svg v-if="!isNeuralSyncing" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                                    </svg>
+                                                    <div v-else class="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                                                </button>
+
+                                                <!-- Mark as Fixed (shown when Pending) -->
+                                                <button 
+                                                    v-if="item.status === 'Pending' || !item.status"
+                                                    @click="updateStatus(item.id, 'Fixed')"
+                                                    class="p-2.5 rounded-xl transition-all hover:scale-110 active:scale-90 shadow-xl relative overflow-hidden bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
+                                                    aria-label="Mark as Fixed"
+                                                    title="Mark as Fixed"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </button>
+
+                                                <!-- Undo to Pending (shown when Fixed, before Validated) -->
+                                                <button 
+                                                    v-if="item.status === 'Fixed'"
+                                                    @click="updateStatus(item.id, 'Pending')"
+                                                    class="p-2.5 rounded-xl transition-all hover:scale-110 active:scale-90 shadow-xl relative overflow-hidden bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                                                    aria-label="Undo to Pending"
+                                                    title="Undo — Kembalikan ke Pending"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Decorative Synapse Line -->
+                                        <div class="absolute bottom-0 left-0 h-[2px] w-0 group-hover:w-full transition-all duration-1000 ease-out"
+                                            :class="item.type === 'hoc' ? 'bg-linear-to-r from-transparent via-fuchsia-400 to-transparent' : 'bg-linear-to-r from-transparent via-cyan-400 to-transparent'"
+                                        ></div>
+                                    </div>
+                                </div>
                                 
                                 <div v-else-if="activeTab === 'transcript'" class="h-full overflow-y-auto pr-4 custom-scrollbar text-slate-300 text-[13px] leading-relaxed p-6 rounded-3xl border border-white/5 bg-zinc-900/50">
                                     <p class="whitespace-pre-wrap">{{ selectedLog.transcript_text || 'No transcript available.' }}</p>
@@ -581,7 +608,7 @@ watch(chatHistory, () => {
                                 <div v-for="(msg, i) in chatHistory" :key="i" :class="['flex', msg.role === 'user' ? 'justify-end' : 'justify-start']">
                                     <div :class="[
                                         'max-w-[90%] p-5 rounded-3xl text-[13px] leading-relaxed shadow-2xl relative transition-all duration-500',
-                                        msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none border border-white/10' : (msg.role === 'system' ? 'bg-white/2 border border-white/5 text-slate-500 text-[10px] uppercase font-black tracking-widest text-center w-full rounded-xl py-3' : 'bg-white/5 border border-white/10 text-slate-200 rounded-tl-none backdrop-blur-xl')
+                                        msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none border border-white/10' : (msg.role === 'system' ? 'bg-white/5 border border-white/5 text-slate-500 text-[10px] uppercase font-black tracking-widest text-center w-full rounded-xl py-3' : 'bg-white/5 border border-white/10 text-slate-200 rounded-tl-none backdrop-blur-xl')
                                     ]">
                                         <div v-if="msg.role === 'ai'" class="absolute -top-3 -left-3 w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-xs shadow-lg border-2 border-[#050507]">🤖</div>
                                         <template v-if="msg.role === 'ai'">
@@ -598,22 +625,24 @@ watch(chatHistory, () => {
                                 </div>
                                 <div v-if="isChatting" class="flex justify-start pl-8">
                                     <div class="bg-white/5 border border-white/10 px-5 py-4 rounded-3xl rounded-tl-none flex gap-1.5 items-center shadow-xl">
-                                        <span class="w-1.5 h-1.5 bg-[#00f2ff] rounded-full animate-bounce animation-duration-[1s]"></span>
-                                        <span class="w-1.5 h-1.5 bg-[#ff00ea] rounded-full animate-bounce animation-duration-[1s] [animation-delay:0.2s]"></span>
-                                        <span class="w-1.5 h-1.5 bg-[#00f2ff] rounded-full animate-bounce animation-duration-[1s] [animation-delay:0.4s]"></span>
+                                        <span class="w-1.5 h-1.5 bg-[#00f2ff] rounded-full animate-bounce" style="animation-duration: 1s;"></span>
+                                        <span class="w-1.5 h-1.5 bg-[#ff00ea] rounded-full animate-bounce" style="animation-duration: 1s; animation-delay: 0.2s;"></span>
+                                        <span class="w-1.5 h-1.5 bg-[#00f2ff] rounded-full animate-bounce" style="animation-duration: 1s; animation-delay: 0.4s;"></span>
                                         <span class="text-[9px] font-black uppercase tracking-[0.2em] ml-2 text-slate-500">Neural Sync...</span>
                                     </div>
                                 </div>
                             </div>
 
                             <!-- Input Area -->
-                            <div class="p-8 bg-white/2 border-t border-white/5">
+                            <div class="p-8 bg-white/5 border-t border-white/5">
                                 <div class="flex flex-col gap-4">
                                     <!-- Model Selector -->
                                     <div class="flex items-center gap-3">
                                         <select 
                                             v-model="selectedAIModel"
-                                            class="bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 outline-none hover:border-indigo-500/50 transition-all cursor-pointer"
+                                            aria-label="Select AI model"
+                                            :disabled="!hasConnectedKeys"
+                                            class="bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 outline-none hover:border-indigo-500/50 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             <option v-for="m in availableModels" :key="m.id" :value="m.id" class="bg-zinc-900 text-slate-300">
                                                 {{ m.name }}
@@ -622,18 +651,20 @@ watch(chatHistory, () => {
                                         <div class="h-px flex-1 bg-white/5"></div>
                                     </div>
 
-                                    <div class="relative flex items-center group">
+                                    <div class="relative flex items-center group" :class="{'opacity-50 pointer-events-none': !hasConnectedKeys}">
                                         <input 
                                             v-model="chatQuery"
                                             @keyup.enter="askAI"
                                             type="text" 
-                                            placeholder="Communicate with Oracle..."
-                                            class="w-full bg-black/50 border border-white/5 rounded-2xl px-6 py-5 text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 outline-none transition-all pr-20 placeholder:text-slate-600 font-medium"
+                                            placeholder="Communicate with Oracle…"
+                                            aria-label="Chat message"
+                                            :disabled="!hasConnectedKeys"
+                                            class="w-full bg-black/50 border border-white/5 rounded-2xl px-6 py-5 text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 outline-none transition-all pr-20 placeholder:text-slate-600 font-medium disabled:cursor-not-allowed"
                                         />
                                     <button 
                                         @click="askAI"
-                                        :disabled="isChatting || !chatQuery"
-                                        class="absolute right-3 p-3 bg-indigo-600 rounded-xl hover:bg-indigo-500 disabled:opacity-20 disabled:grayscale transition-all shadow-lg active:scale-90 group-hover:shadow-indigo-500/20"
+                                        :disabled="isChatting || !chatQuery || !hasConnectedKeys"
+                                        class="absolute right-3 p-3 bg-indigo-600 rounded-xl hover:bg-indigo-500 disabled:opacity-20 disabled:grayscale transition-all shadow-lg active:scale-90 group-hover:shadow-indigo-500/20 disabled:cursor-not-allowed"
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" /></svg>
                                     </button>
@@ -642,7 +673,7 @@ watch(chatHistory, () => {
                             </div>
                         </div>
                         </div>
-                        <div v-else class="flex-1 flex flex-col items-center justify-center bg-indigo-600/2 border border-dashed border-indigo-500/5 rounded-4xl opacity-20 transition-all hover:opacity-40">
+                        <div v-else class="flex-1 flex flex-col items-center justify-center bg-indigo-600/5 border border-dashed border-indigo-500/5 rounded-4xl opacity-20 transition-all hover:opacity-40">
                             <div class="relative w-20 h-20 mb-8">
                                 <div class="absolute inset-0 border border-indigo-500/20 rounded-full animate-ping"></div>
                                 <div class="absolute inset-0 flex items-center justify-center text-5xl grayscale">🤖</div>

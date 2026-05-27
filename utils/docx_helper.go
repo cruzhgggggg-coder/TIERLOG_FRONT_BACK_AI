@@ -35,7 +35,8 @@ func ReadDocxText(path string) (string, error) {
 	defer rc.Close()
 
 	var buf bytes.Buffer
-	_, err = io.Copy(&buf, rc)
+	// Limit decompressing to 10MB to protect against zip bombs / resource exhaustion
+	_, err = io.Copy(&buf, io.LimitReader(rc, 10*1024*1024))
 	if err != nil {
 		return "", err
 	}

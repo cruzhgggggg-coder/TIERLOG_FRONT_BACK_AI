@@ -46,7 +46,8 @@ defineOptions({
                         <input 
                             v-model="searchQuery"
                             type="text" 
-                            placeholder="Search by file name..." 
+                            placeholder="Search by file name…" 
+                            aria-label="Search logs"
                             class="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:border-indigo-500/50 transition-all placeholder:text-slate-600 font-bold"
                         />
                         <div class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600">
@@ -55,7 +56,7 @@ defineOptions({
                     </div>
                 </div>
 
-                <div class="bg-white/2 border border-white/5 rounded-[2.5rem] overflow-hidden backdrop-blur-xl">
+                <div class="bg-white/5 border border-white/5 rounded-[2.5rem] overflow-hidden backdrop-blur-xl">
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse">
                             <thead>
@@ -68,7 +69,7 @@ defineOptions({
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-white/5">
-                                <tr v-for="log in filteredConsultations" :key="log.id" class="group hover:bg-white/2 transition-all">
+                                <tr v-for="log in filteredConsultations" :key="log.id" class="group hover:bg-white/5 transition-all">
                                     <td class="px-8 py-6">
                                         <div class="flex items-center gap-4">
                                             <div class="w-10 h-10 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center justify-center text-indigo-400 group-hover:scale-110 transition-all duration-500">

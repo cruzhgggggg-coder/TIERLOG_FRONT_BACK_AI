@@ -65,14 +65,14 @@ class ConsultationController extends Controller
             'audio' => 'required|file|mimes:mp3,wav,m4a|max:20480',
         ]);
 
-        // Proxying the multipart request to Go
+        // Proxying the multipart request to Go using stream resources to prevent high memory usage
         $response = Http::attach(
             'paper', 
-            file_get_contents($request->file('paper')->getRealPath()), 
+            fopen($request->file('paper')->getRealPath(), 'r'), 
             $request->file('paper')->getClientOriginalName()
         )->attach(
             'audio',
-            file_get_contents($request->file('audio')->getRealPath()),
+            fopen($request->file('audio')->getRealPath(), 'r'),
             $request->file('audio')->getClientOriginalName()
         )->timeout(120)->post("{$this->goBackendUrl}/api/consultation", [
             'user_id' => $userId,
@@ -197,6 +197,27 @@ class ConsultationController extends Controller
         ]);
 
         $user = Auth::user();
+
+        // Fetch FeedbackItem and perform BOLA ownership check
+        $feedback = \App\Models\FeedbackItem::with(['consultationLog.student.lecturer', 'consultationLog.student'])->find($id);
+        if (!$feedback || !$feedback->consultationLog || !$feedback->consultationLog->student) {
+            return response()->json(['error' => 'Feedback item tidak ditemukan atau log tidak valid.'], 404);
+        }
+
+        $student = $feedback->consultationLog->student;
+
+        // Security Check: Only student assigned to log or lecturer assigned to student can update status
+        if ($user->role === 'student') {
+            if ($student->user_id !== $user->id) {
+                return response()->json(['error' => 'Akses ditolak. Anda hanya dapat mengubah status feedback milik sendiri.'], 403);
+            }
+        } elseif ($user->role === 'lecturer') {
+            if (!$student->lecturer || $student->lecturer->user_id !== $user->id) {
+                return response()->json(['error' => 'Akses ditolak. Anda hanya dapat mengubah status feedback untuk mahasiswa bimbingan Anda.'], 403);
+            }
+        } elseif ($user->role !== 'admin') {
+            return response()->json(['error' => 'Akses ditolak.'], 403);
+        }
 
         // Security Check: Only lecturer can set status to Validated
         if ($request->status === 'Validated' && $user->role !== 'lecturer') {

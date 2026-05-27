@@ -63,7 +63,7 @@ onMounted(() => {
                 class="text-7xl md:text-[120px] font-black tracking-tighter mb-10 leading-[0.85] transition-all duration-1000 delay-100 transform"
                 :class="isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'"
             >
-                Master <span class="text-transparent bg-clip-text bg-linear-to-r from-indigo-400 via-purple-400 to-pink-400">Mind</span><br />
+                Sovereign <span class="text-transparent bg-clip-text bg-linear-to-r from-indigo-400 via-purple-400 to-pink-400">AI</span><br />
                 Supervision.
             </h1>
 
@@ -91,18 +91,18 @@ onMounted(() => {
             <!-- Floating Status Cards -->
             <div class="mt-32 w-full max-w-6xl grid grid-cols-1 md:grid-cols-3 gap-6 relative animate-in">
                 <div class="bg-white/5 border border-white/10 p-8 rounded-[40px] backdrop-blur-xl group hover:border-indigo-500/30 transition-all">
-                    <div class="text-4xl mb-6">🎙️</div>
+                    <div class="text-4xl mb-6" aria-hidden="true">🎙️</div>
                     <h3 class="text-xl font-bold mb-3">Native Audio</h3>
                     <p class="text-sm text-slate-500 leading-relaxed">Direct analysis from your consultation MP3 files. No intermediaries, maximum accuracy.</p>
                 </div>
                 <div class="bg-linear-to-br from-indigo-600/20 to-purple-600/20 border border-indigo-500/30 p-8 rounded-[40px] backdrop-blur-xl relative overflow-hidden group">
                     <div class="absolute -right-4 -top-4 text-white/5 text-8xl font-black">AI</div>
-                    <div class="text-4xl mb-6">🧠</div>
+                    <div class="text-4xl mb-6" aria-hidden="true">🧠</div>
                     <h3 class="text-xl font-bold mb-3">Guarded Oracle</h3>
                     <p class="text-sm text-slate-300 leading-relaxed font-medium">AI Assistant securely locked to your lecturer's feedback. Anti-hallucination.</p>
                 </div>
                 <div class="bg-white/5 border border-white/10 p-8 rounded-[40px] backdrop-blur-xl group hover:border-purple-500/30 transition-all">
-                    <div class="text-4xl mb-6">📄</div>
+                    <div class="text-4xl mb-6" aria-hidden="true">📄</div>
                     <h3 class="text-xl font-bold mb-3">Structure Sync</h3>
                     <p class="text-sm text-slate-500 leading-relaxed">Automatic synchronization between spoken revisions and written paper drafts.</p>
                 </div>
@@ -112,7 +112,7 @@ onMounted(() => {
         <!-- Footer -->
         <footer class="relative z-10 border-t border-white/5 py-12">
             <div class="max-w-7xl mx-auto px-8 flex justify-between items-center text-slate-500 text-xs font-bold uppercase tracking-widest">
-                <p>© 2026 TierLog Master Mind</p>
+                <p>© 2026 TierLog Sovereign AI</p>
                 <div class="flex gap-8">
                     <a href="#" class="hover:text-white transition-colors">Privacy</a>
                     <a href="#" class="hover:text-white transition-colors">Terms</a>
@@ -133,10 +133,5 @@ onMounted(() => {
 @keyframes fade-up {
     from { transform: translateY(2rem); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
-}
-
-@font-face {
-    font-family: 'Inter';
-    src: url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
 }
 </style>

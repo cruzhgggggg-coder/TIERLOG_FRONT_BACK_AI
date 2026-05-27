@@ -225,7 +225,7 @@ const stats = computed(() => {
                     <h3 class="text-sm font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Mentored Students List</h3>
                     <div v-if="students.length === 0" class="text-xs text-slate-500 italic">No students registered yet.</div>
                     <div class="grid grid-cols-1 gap-2">
-                        <div v-for="student in students" :key="student.id" class="flex items-center justify-between p-3 bg-white/3 border border-white/5 rounded-xl">
+                        <div v-for="student in students" :key="student.id" class="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl">
                             <div class="flex items-center gap-3">
                                 <User class="w-4 h-4 text-slate-500" />
                                 <div>
@@ -241,7 +241,7 @@ const stats = computed(() => {
 
             <!-- Detail View -->
             <div class="lg:col-span-7">
-                <div v-if="selectedLog" class="bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl sticky top-8">
+                <div v-if="selectedLog" class="bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl lg:sticky lg:top-8">
                     <div class="flex justify-between items-start mb-8">
                         <div>
                             <span class="inline-block px-3 py-1 bg-indigo-500/20 border border-indigo-500/30 rounded-full text-[10px] font-black tracking-[0.2em] text-indigo-400 uppercase mb-4">Consultation Detail</span>
@@ -328,23 +328,29 @@ const stats = computed(() => {
                                             <button 
                                                 v-if="feedback.status !== 'Validated'"
                                                 @click="updateStatus(feedback.id, 'Validated')"
-                                                class="p-2 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-xl border border-green-500/30 transition-all title='Approve Revision'"
+                                                class="p-2 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-xl border border-green-500/30 transition-all"
+                                                title="Approve Revision"
+                                                aria-label="Approve Revision"
                                             >
-                                                <CheckCircle class="w-4 h-4" />
+                                                <CheckCircle class="w-4 h-4" aria-hidden="true" />
                                             </button>
                                             <button 
                                                 v-if="feedback.status === 'Pending'"
                                                 @click="updateStatus(feedback.id, 'Fixed')"
-                                                class="p-2 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-xl border border-blue-500/30 transition-all title='Mark as Done'"
+                                                class="p-2 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-xl border border-blue-500/30 transition-all"
+                                                title="Mark as Done"
+                                                aria-label="Mark as Done"
                                             >
-                                                <Activity class="w-4 h-4" />
+                                                <Activity class="w-4 h-4" aria-hidden="true" />
                                             </button>
                                             <button 
                                                 v-if="feedback.status !== 'Pending'"
                                                 @click="updateStatus(feedback.id, 'Pending')"
-                                                class="p-2 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-xl border border-amber-500/30 transition-all title='Needs Improvement'"
+                                                class="p-2 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-xl border border-amber-500/30 transition-all"
+                                                title="Needs Improvement"
+                                                aria-label="Needs Improvement"
                                             >
-                                                <Clock class="w-4 h-4" />
+                                                <Clock class="w-4 h-4" aria-hidden="true" />
                                             </button>
                                         </div>
                                     </div>

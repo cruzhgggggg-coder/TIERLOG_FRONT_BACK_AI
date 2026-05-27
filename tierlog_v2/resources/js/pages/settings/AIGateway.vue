@@ -147,7 +147,10 @@ const handleModelChange = (e: any) => {
                         <input
                             v-model="universalKey"
                             type="text"
-                            placeholder="Paste your API key here (sk-..., AIza...)"
+                            placeholder="Paste your API key here (sk-…, AIza…)"
+                            aria-label="API Key"
+                            spellcheck="false"
+                            autocomplete="off"
                             class="relative w-full bg-black border border-white/10 rounded-xl px-6 py-5 text-lg font-mono text-white placeholder:text-slate-600 outline-none focus:border-indigo-500/50 transition-all pr-32"
                         />
                         
