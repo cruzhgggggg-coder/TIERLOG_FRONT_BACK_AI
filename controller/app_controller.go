@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"testing_go/auth"
 	"testing_go/koneksi"
@@ -24,6 +27,11 @@ import (
 
 var WebSocketHub *realtime.Hub
 
+type ClassificationItem struct {
+	ID       uint64 `json:"id"`
+	Category string `json:"category"`
+}
+
 func SetRealtimeHub(hub *realtime.Hub) {
 	WebSocketHub = hub
 }
@@ -34,10 +42,11 @@ func sanitizeUser(user *models.User) gin.H {
 		"name":              user.Name,
 		"email":             user.Email,
 		"role":              user.Role,
-		"openai_key":        user.OpenAIKey,
-		"gemini_key":        user.GeminiKey,
-		"anthropic_key":     user.AnthropicKey,
-		"nvidia_key":        user.NvidiaKey,
+		"openai_key":        auth.MaskAPIKey(auth.DecryptAPIKey(user.OpenAIKey)),
+		"gemini_key":        auth.MaskAPIKey(auth.DecryptAPIKey(user.GeminiKey)),
+		"anthropic_key":     auth.MaskAPIKey(auth.DecryptAPIKey(user.AnthropicKey)),
+		"nvidia_key":        auth.MaskAPIKey(auth.DecryptAPIKey(user.NvidiaKey)),
+		"groq_key":          auth.MaskAPIKey(auth.DecryptAPIKey(user.GroqKey)),
 		"preferred_model":   user.PreferredModel,
 		"is_gateway_active": user.IsGatewayActive,
 		"created_at":        user.CreatedAt,
@@ -102,6 +111,19 @@ func Register(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if utf8.RuneCountInString(req.Name) > maxInputNameLength {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Name must be ≤ %d characters", maxInputNameLength)})
+		return
+	}
+	if len(req.Email) > maxInputEmailLength {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Email must be ≤ %d characters", maxInputEmailLength)})
+		return
+	}
+	if req.ThesisTitle != "" && utf8.RuneCountInString(req.ThesisTitle) > maxInputContentLength {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Thesis title must be ≤ %d characters", maxInputContentLength)})
 		return
 	}
 
@@ -362,11 +384,12 @@ func UpdateAIGatewaySettingsV2(c *gin.Context) {
 	user := middleware.CurrentUser(c)
 
 	var req struct {
-		OpenAIKey      string `json:"openai_key"`
-		GeminiKey      string `json:"gemini_key"`
-		AnthropicKey   string `json:"anthropic_key"`
-		NvidiaKey      string `json:"nvidia_key"`
-		PreferredModel string `json:"preferred_model"`
+		OpenAIKey      *string `json:"openai_key"`
+		GeminiKey      *string `json:"gemini_key"`
+		AnthropicKey   *string `json:"anthropic_key"`
+		NvidiaKey      *string `json:"nvidia_key"`
+		GroqKey        *string `json:"groq_key"`
+		PreferredModel string  `json:"preferred_model"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -374,10 +397,46 @@ func UpdateAIGatewaySettingsV2(c *gin.Context) {
 		return
 	}
 
-	user.OpenAIKey = req.OpenAIKey
-	user.GeminiKey = req.GeminiKey
-	user.AnthropicKey = req.AnthropicKey
-	user.NvidiaKey = req.NvidiaKey
+	if req.OpenAIKey != nil {
+		val := *req.OpenAIKey
+		if val == "" {
+			user.OpenAIKey = ""
+		} else if !strings.Contains(val, "*") {
+			user.OpenAIKey = auth.EncryptAPIKey(val)
+		}
+	}
+	if req.GeminiKey != nil {
+		val := *req.GeminiKey
+		if val == "" {
+			user.GeminiKey = ""
+		} else if !strings.Contains(val, "*") {
+			user.GeminiKey = auth.EncryptAPIKey(val)
+		}
+	}
+	if req.AnthropicKey != nil {
+		val := *req.AnthropicKey
+		if val == "" {
+			user.AnthropicKey = ""
+		} else if !strings.Contains(val, "*") {
+			user.AnthropicKey = auth.EncryptAPIKey(val)
+		}
+	}
+	if req.NvidiaKey != nil {
+		val := *req.NvidiaKey
+		if val == "" {
+			user.NvidiaKey = ""
+		} else if !strings.Contains(val, "*") {
+			user.NvidiaKey = auth.EncryptAPIKey(val)
+		}
+	}
+	if req.GroqKey != nil {
+		val := *req.GroqKey
+		if val == "" {
+			user.GroqKey = ""
+		} else if !strings.Contains(val, "*") {
+			user.GroqKey = auth.EncryptAPIKey(val)
+		}
+	}
 	if req.PreferredModel != "" {
 		user.PreferredModel = req.PreferredModel
 	}
@@ -528,6 +587,46 @@ func ArchiveListV2(c *gin.Context) {
 	ConsultationListV2(c)
 }
 
+const (
+	maxAudioUploadSize = 50 << 20  // 50 MB
+	maxPaperUploadSize = 20 << 20  // 20 MB
+	maxAnnotationSize  = 10 << 20  // 10 MB
+	maxInputNameLength = 255
+	maxInputEmailLength = 254
+	maxInputContentLength = 5000
+)
+
+var (
+	allowedAudioExts = map[string]bool{".mp3": true, ".wav": true, ".m4a": true, ".ogg": true, ".webm": true, ".mp4": true}
+	allowedPaperExts = map[string]bool{".docx": true}
+	allowedImageExts = map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".gif": true}
+	allowedAnnotExts = map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".gif": true, ".docx": true}
+	safeFilenameRe   = regexp.MustCompile(`[^a-zA-Z0-9_\-.]`)
+)
+
+func sanitizeFilename(name string) string {
+	clean := safeFilenameRe.ReplaceAllString(name, "_")
+	clean = filepath.Base(clean)
+	if clean == "." || clean == ".." || clean == "" {
+		clean = "unnamed"
+	}
+	if len(clean) > 100 {
+		clean = clean[len(clean)-100:]
+	}
+	return clean
+}
+
+func validateFileUpload(file *multipart.FileHeader, maxSizes map[string]int64, allowedExts map[string]bool) error {
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	if !allowedExts[ext] {
+		return fmt.Errorf("file type '%s' is not allowed", ext)
+	}
+	if maxSize, ok := maxSizes[ext]; ok && file.Size > maxSize {
+		return fmt.Errorf("file size %d exceeds maximum %d bytes", file.Size, maxSize)
+	}
+	return nil
+}
+
 func CreateConsultationV2(c *gin.Context) {
 	user := middleware.CurrentUser(c)
 	if user.Role != models.RoleStudent {
@@ -541,27 +640,59 @@ func CreateConsultationV2(c *gin.Context) {
 		return
 	}
 
-	audioFile, err := c.FormFile("audio")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Audio file is required"})
-		return
-	}
-
+	// ── Paper is ALWAYS required ──
 	paperFile, err := c.FormFile("paper")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Paper file (.docx) is required"})
 		return
 	}
-
-	timestamp := time.Now().UnixNano()
-	audioFilename := fmt.Sprintf("%d_%s", timestamp, audioFile.Filename)
-	audioPath := filepath.Join("storage", "audio", audioFilename)
-	if err := c.SaveUploadedFile(audioFile, audioPath); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save audio file"})
+	if paperFile.Size > maxPaperUploadSize {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Paper file exceeds 20 MB limit"})
 		return
 	}
 
-	paperFilename := fmt.Sprintf("%d_%s", timestamp, paperFile.Filename)
+	ext := strings.ToLower(filepath.Ext(paperFile.Filename))
+	if !allowedPaperExts[ext] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only .docx files are accepted"})
+		return
+	}
+
+	// ── Audio is OPTIONAL ──
+	audioFile, _ := c.FormFile("audio") // err intentionally ignored
+	if audioFile != nil && audioFile.Size > maxAudioUploadSize {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Audio file exceeds 50 MB limit"})
+		return
+	}
+
+	// ── Annotations are OPTIONAL ──
+	var annotationFiles []*multipart.FileHeader
+	if form, formErr := c.MultipartForm(); formErr == nil {
+		annotationFiles = form.File["annotations"]
+	}
+
+	// ── Validation: at least one supplementary input required ──
+	if audioFile == nil && len(annotationFiles) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Please provide at least one: audio recording OR annotation images/notes",
+		})
+		return
+	}
+
+	timestamp := time.Now().UnixNano()
+
+	// Save audio if provided
+	var audioFilename string
+	var audioPath string
+	if audioFile != nil {
+		audioFilename = fmt.Sprintf("%d_%s", timestamp, sanitizeFilename(audioFile.Filename))
+		audioPath = filepath.Join("storage", "audio", audioFilename)
+		if err := c.SaveUploadedFile(audioFile, audioPath); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save audio file"})
+			return
+		}
+	}
+
+	paperFilename := fmt.Sprintf("%d_%s", timestamp, sanitizeFilename(paperFile.Filename))
 	paperPath := filepath.Join("storage", "paper", paperFilename)
 	if err := c.SaveUploadedFile(paperFile, paperPath); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save paper file"})
@@ -584,33 +715,49 @@ func CreateConsultationV2(c *gin.Context) {
 		prevFeedbackStr = strings.Join(feedbackLines, "\n")
 	}
 
-	// ── Process annotation files (optional) ───────────────────────────────────
+	type annotationResult struct {
+		filename     string
+		fileType     models.AnnotationFileType
+		extractedText string
+	}
+
+	var annotationResults []annotationResult
 	var annotationSummary string
-	if form, formErr := c.MultipartForm(); formErr == nil && len(form.File["annotations"]) > 0 {
-		annotationFiles := form.File["annotations"]
-		fmt.Printf("\033[36m[ANNOTATION] Found %d annotation file(s) — saving & extracting...\033[0m\n", len(annotationFiles))
-		imageExts := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".gif": true}
-		var summaryParts []string
+	if len(annotationFiles) > 0 {
 		for i, fh := range annotationFiles {
-			ext := strings.ToLower(filepath.Ext(fh.Filename))
-			filename := fmt.Sprintf("%d_annotation_%d%s", timestamp, i+1, ext)
+			if fh.Size > maxAnnotationSize {
+				continue
+			}
+			annExt := strings.ToLower(filepath.Ext(fh.Filename))
+			if !allowedAnnotExts[annExt] {
+				continue
+			}
+			filename := fmt.Sprintf("%d_annotation_%d%s", timestamp, i+1, annExt)
 			savePath := filepath.Join("storage", "annotations", filename)
 			if err := c.SaveUploadedFile(fh, savePath); err != nil {
 				continue
 			}
 			var extractedText string
-			if imageExts[ext] {
-				extractedText, _ = processAnnotationImage(savePath, user.GeminiKey)
-			} else if ext == ".docx" {
+			var fileType models.AnnotationFileType
+			if allowedImageExts[annExt] {
+				fileType = models.AnnotationImage
+				extractedText, _ = processAnnotationImage(savePath, user)
+			} else if annExt == ".docx" {
+				fileType = models.AnnotationDocx
 				extractedText, _ = utils.ExtractDocxTrackChanges(savePath)
 			} else {
 				continue
 			}
+			annotationResults = append(annotationResults, annotationResult{
+				filename:      filename,
+				fileType:      fileType,
+				extractedText: extractedText,
+			})
 			label := fmt.Sprintf("[Anotasi %d — %s]", i+1, fh.Filename)
-			summaryParts = append(summaryParts, label+"\n"+extractedText)
+			annotationSummary = annotationSummary + label + "\n" + extractedText + "\n\n---\n\n"
 		}
-		if len(summaryParts) > 0 {
-			annotationSummary = strings.Join(summaryParts, "\n\n---\n\n")
+		annotationSummary = strings.TrimRight(annotationSummary, "\n\n---\n\n")
+		if annotationSummary != "" {
 			prevFeedbackStr = prevFeedbackStr + "\n\nANOTASI REVISI DOSEN:\n" + annotationSummary
 		}
 	}
@@ -621,9 +768,15 @@ func CreateConsultationV2(c *gin.Context) {
 		return
 	}
 
-	transcriptFilename := fmt.Sprintf("%d_transcript.txt", timestamp)
-	transcriptPath := filepath.Join("storage", "transcript", transcriptFilename)
-	_ = os.WriteFile(transcriptPath, []byte(transcriptContent), 0644)
+	// Only write transcript file if there's content
+	var transcriptFilename string
+	if transcriptContent != "" {
+		transcriptFilename = fmt.Sprintf("%d_transcript.txt", timestamp)
+		transcriptPath := filepath.Join("storage", "transcript", transcriptFilename)
+		if writeErr := os.WriteFile(transcriptPath, []byte(transcriptContent), 0644); writeErr != nil {
+			fmt.Printf("[WARN] Failed to write transcript file: %v\n", writeErr)
+		}
+	}
 
 	log := models.ConsultationLog{
 		StudentID:          student.ID,
@@ -639,37 +792,15 @@ func CreateConsultationV2(c *gin.Context) {
 		return
 	}
 
-	// ── Save annotation records linked to the new log ─────────────────────────
-	if annotationSummary != "" {
-		if form, formErr := c.MultipartForm(); formErr == nil {
-			annotationFiles := form.File["annotations"]
-			imageExts := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".gif": true}
-			for i, fh := range annotationFiles {
-				ext := strings.ToLower(filepath.Ext(fh.Filename))
-				filename := fmt.Sprintf("%d_annotation_%d%s", timestamp, i+1, ext)
-				savedPath := filepath.Join("storage", "annotations", filename)
-				var fileType models.AnnotationFileType
-				if imageExts[ext] {
-					fileType = models.AnnotationImage
-				} else if ext == ".docx" {
-					fileType = models.AnnotationDocx
-				} else {
-					continue
-				}
-				var extractedText string
-				if fileType == models.AnnotationImage {
-					extractedText, _ = processAnnotationImage(savedPath, user.GeminiKey)
-				} else {
-					extractedText, _ = utils.ExtractDocxTrackChanges(savedPath)
-				}
-				ann := models.RevisionAnnotation{
-					ConsultationLogID: log.ID,
-					Filename:          filename,
-					FileType:          fileType,
-					ExtractedText:     extractedText,
-				}
-				koneksi.DB.Create(&ann)
-			}
+	for _, ann := range annotationResults {
+		record := models.RevisionAnnotation{
+			ConsultationLogID: log.ID,
+			Filename:          ann.filename,
+			FileType:          ann.fileType,
+			ExtractedText:     ann.extractedText,
+		}
+		if err := koneksi.DB.Create(&record).Error; err != nil {
+			fmt.Printf("[WARN] Failed to save annotation record: %v\n", err)
 		}
 	}
 
@@ -714,7 +845,6 @@ func ConsultationChatV2(c *gin.Context) {
 		})
 	}
 
-	_ = log
 	response, err := GenerateRevisionAssistance(req.LogID, req.Query, req.Model)
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "GUARDED:") {
@@ -1055,8 +1185,67 @@ func extractJSONBounds(input string) string {
 // Kept for backward compatibility — some call sites still use the old name.
 func extractJSONString(input string) string { return extractJSONBounds(input) }
 
-// ClassifyFeedbackV2 uses the student's own API key to classify all raw feedback items
-// for a consultation log into HOC (Major) and LOC (Minor).
+func parseClassificationResponse(aiResponse string, cleanedResponse string, log *models.ConsultationLog) []ClassificationItem {
+	var result []ClassificationItem
+
+	var wrapper struct {
+		Items           []ClassificationItem `json:"items"`
+		Classifications []ClassificationItem `json:"classifications"`
+		Feedbacks       []ClassificationItem `json:"feedbacks"`
+		Data            []ClassificationItem `json:"data"`
+		Results         []ClassificationItem `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(cleanedResponse), &wrapper); err == nil {
+		switch {
+		case len(wrapper.Items) > 0:
+			return wrapper.Items
+		case len(wrapper.Classifications) > 0:
+			return wrapper.Classifications
+		case len(wrapper.Feedbacks) > 0:
+			return wrapper.Feedbacks
+		case len(wrapper.Data) > 0:
+			return wrapper.Data
+		case len(wrapper.Results) > 0:
+			return wrapper.Results
+		}
+	}
+
+	if err := json.Unmarshal([]byte(cleanedResponse), &result); err == nil && len(result) > 0 {
+		return result
+	}
+
+	var flatMap map[string]string
+	if err := json.Unmarshal([]byte(cleanedResponse), &flatMap); err == nil && len(flatMap) > 0 {
+		for k, v := range flatMap {
+			if id, parseErr := strconv.ParseUint(k, 10, 64); parseErr == nil {
+				result = append(result, ClassificationItem{ID: id, Category: v})
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
+	}
+
+	for _, fb := range log.FeedbackItems {
+		idStr := strconv.FormatUint(fb.ID, 10)
+		idMarker := `"id":` + idStr
+		if idx := strings.Index(aiResponse, idMarker); idx != -1 {
+			chunk := aiResponse[idx:]
+			if len(chunk) > 80 {
+				chunk = chunk[:80]
+			}
+			chunk = strings.ToLower(chunk)
+			cat := "Minor"
+			if strings.Contains(chunk, "major") {
+				cat = "Major"
+			}
+			result = append(result, ClassificationItem{ID: fb.ID, Category: cat})
+		}
+	}
+
+	return result
+}
+
 func ClassifyFeedbackV2(c *gin.Context) {
 	user := middleware.CurrentUser(c)
 	if user.Role != models.RoleStudent {
@@ -1071,7 +1260,6 @@ func ClassifyFeedbackV2(c *gin.Context) {
 		return
 	}
 
-	// Verify accessibility
 	log, err := accessibleLog(user, logID)
 	if err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
@@ -1083,7 +1271,6 @@ func ClassifyFeedbackV2(c *gin.Context) {
 		return
 	}
 
-	// Build the item list for the AI
 	type classificationInput struct {
 		ID      uint64 `json:"id"`
 		Content string `json:"content"`
@@ -1094,8 +1281,6 @@ func ClassifyFeedbackV2(c *gin.Context) {
 	}
 	itemsData, _ := json.Marshal(inputItems)
 
-	// NOTE: json_object mode forces the model to return an OBJECT ({}), not a bare array ([]).
-	// We therefore ask for {"items": [...]} which every model can produce reliably.
 	systemPrompt := `You are an expert academic writing advisor.
 
 Your task: classify each feedback item below as either "Major" or "Minor".
@@ -1113,128 +1298,198 @@ Return ONLY valid JSON in this exact shape — no explanation, no markdown, no e
 		return
 	}
 
-	// Print raw response in terminal for debugging
-	fmt.Printf("\033[33m[AI CLASSIFICATION RAW RESPONSE]:\033[0m\n%s\n\033[0m", aiResponse)
+	// Sanitize JSON before parsing
+	cleanedResponse := sanitizeJSON(aiResponse)
+	cleanedResponse = extractJSONBounds(cleanedResponse)
+	cleanedResponse = strings.TrimSpace(cleanedResponse)
 
-	// Strip markdown fences and find JSON boundaries
-	cleanedResponse := extractJSONBounds(aiResponse)
-	fmt.Printf("\033[36m[AI CLASSIFICATION CLEANED]:\033[0m\n%s\n\033[0m", cleanedResponse)
+	finalClassifications := parseClassificationResponse(aiResponse, cleanedResponse, log)
 
-	type ClassificationItem struct {
-		ID       uint64 `json:"id"`
-		Category string `json:"category"`
+	if len(finalClassifications) == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to parse AI classification results. Please try sorting again.",
+		})
+		return
 	}
 
-	var finalClassifications []ClassificationItem
-
-	// ── Attempt 1: {"items": [...]} — the shape we asked for
-	{
-		var wrapper struct {
-			Items           []ClassificationItem `json:"items"`
-			Classifications []ClassificationItem `json:"classifications"`
-			Feedbacks       []ClassificationItem `json:"feedbacks"`
-			Data            []ClassificationItem `json:"data"`
-			Results         []ClassificationItem `json:"results"`
-		}
-		if err := json.Unmarshal([]byte(cleanedResponse), &wrapper); err == nil {
-			switch {
-			case len(wrapper.Items) > 0:
-				finalClassifications = wrapper.Items
-				goto SAVE_TO_DB
-			case len(wrapper.Classifications) > 0:
-				finalClassifications = wrapper.Classifications
-				goto SAVE_TO_DB
-			case len(wrapper.Feedbacks) > 0:
-				finalClassifications = wrapper.Feedbacks
-				goto SAVE_TO_DB
-			case len(wrapper.Data) > 0:
-				finalClassifications = wrapper.Data
-				goto SAVE_TO_DB
-			case len(wrapper.Results) > 0:
-				finalClassifications = wrapper.Results
-				goto SAVE_TO_DB
-			}
-		}
-	}
-
-	// ── Attempt 2: bare array [{"id":1,"category":"Major"}, ...]
-	if err := json.Unmarshal([]byte(cleanedResponse), &finalClassifications); err == nil && len(finalClassifications) > 0 {
-		goto SAVE_TO_DB
-	}
-
-	// ── Attempt 3: flat map {"1": "Major", "2": "Minor"}
-	{
-		var flatMap map[string]string
-		if err := json.Unmarshal([]byte(cleanedResponse), &flatMap); err == nil && len(flatMap) > 0 {
-			for k, v := range flatMap {
-				if id, parseErr := strconv.ParseUint(k, 10, 64); parseErr == nil {
-					finalClassifications = append(finalClassifications, ClassificationItem{ID: id, Category: v})
-				}
-			}
-			if len(finalClassifications) > 0 {
-				goto SAVE_TO_DB
-			}
-		}
-	}
-
-	// ── Attempt 4: regex scan — last resort when JSON is badly formed
-	{
-		// Find patterns like "id":5,"category":"Major" anywhere in the string
-		for _, item := range log.FeedbackItems {
-			idStr := strconv.FormatUint(item.ID, 10)
-			// Look for the id near a category label anywhere in the response
-			idMarker := `"id":` + idStr
-			if idx := strings.Index(aiResponse, idMarker); idx != -1 {
-				chunk := aiResponse[idx:]
-				if len(chunk) > 80 {
-					chunk = chunk[:80]
-				}
-				chunk = strings.ToLower(chunk)
-				cat := "Minor"
-				if strings.Contains(chunk, "major") {
-					cat = "Major"
-				}
-				finalClassifications = append(finalClassifications, ClassificationItem{ID: item.ID, Category: cat})
-			}
-		}
-		if len(finalClassifications) > 0 {
-			fmt.Printf("\033[33m[AI CLASSIFICATION] Used regex fallback — %d items recovered\033[0m\n", len(finalClassifications))
-			goto SAVE_TO_DB
-		}
-	}
-
-	// ── All attempts failed
-	c.JSON(http.StatusInternalServerError, gin.H{
-		"error": "Failed to parse AI classification results. The response format returned by the AI was not recognized. Please try sorting again.",
-	})
-	return
-
-SAVE_TO_DB:
-	// Save to DB and prepare broadcast payloads
-	tx := koneksi.DB.Begin()
 	for _, cl := range finalClassifications {
 		if cl.Category == "Major" || cl.Category == "Minor" {
-			tx.Model(&models.FeedbackItem{}).Where("id = ? AND log_id = ?", cl.ID, log.ID).Update("category", cl.Category)
+			koneksi.DB.Model(&models.FeedbackItem{}).Where("id = ? AND log_id = ?", cl.ID, log.ID).Update("category", cl.Category)
 		}
 	}
-	tx.Commit()
 
-	// Reload all feedback items and broadcast
 	var updatedItems []models.FeedbackItem
 	koneksi.DB.Where("log_id = ?", log.ID).Find(&updatedItems)
 
 	if WebSocketHub != nil {
 		for _, item := range updatedItems {
 			WebSocketHub.Broadcast("consultation."+strconv.FormatUint(log.ID, 10), "feedback.status-updated", gin.H{
-				"feedback_id":          item.ID,
-				"log_id":               item.ConsultationLogID,
-				"consultation_log_id":  item.ConsultationLogID,
-				"status":               item.Status,
-				"category":             item.Category,
-				"updated_by_role":      user.Role,
+				"feedback_id":         item.ID,
+				"log_id":              item.ConsultationLogID,
+				"consultation_log_id": item.ConsultationLogID,
+				"status":              item.Status,
+				"category":            item.Category,
+				"updated_by_role":     user.Role,
 			})
 		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Feedback items classified successfully", "data": updatedItems})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  SESSION DELETION & DISK CLEANUP
+// ─────────────────────────────────────────────────────────────────────────────
+
+// DeleteConsultationV2 removes a consultation session, its files, and all related records.
+// Authorization: Students can only delete their own sessions.
+//
+//	Lecturers can only delete sessions of their supervised students.
+func DeleteConsultationV2(c *gin.Context) {
+	user := middleware.CurrentUser(c)
+	logIDStr := c.Param("id")
+	logID, err := strconv.ParseUint(logIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session ID"})
+		return
+	}
+
+	// Verify access (same logic as accessibleLog)
+	log, err := accessibleLog(user, logID)
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied or session not found"})
+		return
+	}
+
+	// ── Step 1: Delete physical files from disk ──
+	filesToDelete := []string{}
+
+	if log.AudioFilename != "" {
+		filesToDelete = append(filesToDelete, filepath.Join("storage", "audio", log.AudioFilename))
+	}
+	if log.PaperFilename != "" {
+		filesToDelete = append(filesToDelete, filepath.Join("storage", "paper", log.PaperFilename))
+	}
+	if log.TranscriptFilename != "" {
+		filesToDelete = append(filesToDelete, filepath.Join("storage", "transcript", log.TranscriptFilename))
+	}
+
+	// Load annotations to delete their files
+	var annotations []models.RevisionAnnotation
+	koneksi.DB.Where("log_id = ?", log.ID).Find(&annotations)
+	for _, ann := range annotations {
+		filesToDelete = append(filesToDelete, filepath.Join("storage", "annotations", ann.Filename))
+	}
+
+	for _, filePath := range filesToDelete {
+		if err := os.Remove(filePath); err != nil {
+			fmt.Printf("[DELETE] Warning: failed to remove file %s: %v\n", filePath, err)
+		} else {
+			fmt.Printf("[DELETE] Removed file: %s\n", filePath)
+		}
+	}
+
+	// ── Step 2: Delete database records in transaction ──
+	if err := koneksi.DB.Transaction(func(tx *gorm.DB) error {
+		// Delete AI chat messages
+		if err := tx.Where("log_id = ?", log.ID).Delete(&models.AIChatMessage{}).Error; err != nil {
+			return err
+		}
+		// Delete direct messages
+		if err := tx.Where("log_id = ?", log.ID).Delete(&models.DirectMessage{}).Error; err != nil {
+			return err
+		}
+		// Delete feedback items (cascades via GORM constraint, but explicit for safety)
+		if err := tx.Where("log_id = ?", log.ID).Delete(&models.FeedbackItem{}).Error; err != nil {
+			return err
+		}
+		// Delete revision annotations
+		if err := tx.Where("log_id = ?", log.ID).Delete(&models.RevisionAnnotation{}).Error; err != nil {
+			return err
+		}
+		// Delete the consultation log itself
+		if err := tx.Delete(log).Error; err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete session: " + err.Error()})
+		return
+	}
+
+	// ── Step 3: Broadcast deletion event ──
+	if WebSocketHub != nil {
+		WebSocketHub.Broadcast("consultation."+strconv.FormatUint(log.ID, 10), "session.deleted", gin.H{
+			"log_id":     log.ID,
+			"deleted_by": user.ID,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Session deleted successfully"})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  SESSION-BASED FILTERING
+// ─────────────────────────────────────────────────────────────────────────────
+
+// LecturerStudentSessions returns session metadata for a specific student,
+// enabling the lecturer dashboard to filter revisions per session.
+func LecturerStudentSessions(c *gin.Context) {
+	user := middleware.CurrentUser(c)
+	if user.Role != models.RoleLecturer || user.Lecturer == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only lecturers can access this"})
+		return
+	}
+
+	studentIDStr := c.Param("id")
+	studentID, err := strconv.ParseUint(studentIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid student ID"})
+		return
+	}
+
+	// Verify student belongs to this lecturer
+	var student models.Student
+	if err := koneksi.DB.Where("id = ? AND lecturer_id = ?", studentID, user.Lecturer.ID).First(&student).Error; err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Student not in your supervision"})
+		return
+	}
+
+	var logs []models.ConsultationLog
+	if err := koneksi.DB.Preload("FeedbackItems").
+		Where("student_id = ?", student.ID).
+		Order("created_at asc").
+		Find(&logs).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	type SessionInfo struct {
+		SessionNumber int    `json:"session_number"`
+		LogID         uint64 `json:"log_id"`
+		PaperFilename string `json:"paper_filename"`
+		CreatedAt     string `json:"created_at"`
+		FeedbackCount int    `json:"feedback_count"`
+		PendingCount  int    `json:"pending_count"`
+	}
+
+	var sessions []SessionInfo
+	for i, log := range logs {
+		pending := 0
+		for _, f := range log.FeedbackItems {
+			if f.Status == models.StatusPending {
+				pending++
+			}
+		}
+		sessions = append(sessions, SessionInfo{
+			SessionNumber: i + 1,
+			LogID:         log.ID,
+			PaperFilename: log.PaperFilename,
+			CreatedAt:     log.CreatedAt.Format(time.RFC3339),
+			FeedbackCount: len(log.FeedbackItems),
+			PendingCount:  pending,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": sessions})
 }

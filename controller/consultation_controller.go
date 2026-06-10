@@ -194,6 +194,12 @@ func UpdateFeedbackStatus(c *gin.Context) {
 		return
 	}
 
+	validStatuses := map[string]bool{"Fixed": true, "Pending": true, "Validated": true}
+	if !validStatuses[req.Status] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status value"})
+		return
+	}
+
 	if err := koneksi.DB.Model(&models.FeedbackItem{}).Where("id = ?", id).Update("status", req.Status).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error: " + err.Error()})
 		return

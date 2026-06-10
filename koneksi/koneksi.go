@@ -48,7 +48,6 @@ func ConnectDatabase() {
 		panic("An error occurred during database migration: " + err.Error())
 	}
 
-	// Clean up accidental consultation_log_id column and its foreign key constraints created by GORM prior to the mapping fix
 	migrator := database.Migrator()
 	if migrator.HasConstraint(&models.FeedbackItem{}, "feedback_items_consultation_log_id_foreign") {
 		_ = migrator.DropConstraint(&models.FeedbackItem{}, "feedback_items_consultation_log_id_foreign")
@@ -60,10 +59,31 @@ func ConnectDatabase() {
 		_ = migrator.DropColumn(&models.FeedbackItem{}, "consultation_log_id")
 	}
 
-	// Ensure the status enum in feedback_items includes 'Validated'
 	_ = database.Exec("ALTER TABLE feedback_items MODIFY COLUMN status ENUM('Fixed', 'Pending', 'Validated') NOT NULL DEFAULT 'Pending'").Error
 
-	// Production-grade connection pooling optimization
+	indexes := []struct {
+		table string
+		cols  string
+		name  string
+	}{
+		{"feedback_items", "log_id", "idx_feedback_log_id"},
+		{"feedback_items", "log_id,status", "idx_feedback_log_status"},
+		{"feedback_items", "log_id,category", "idx_feedback_log_category"},
+		{"consultation_logs", "student_id", "idx_consultation_student_id"},
+		{"consultation_logs", "student_id,created_at", "idx_consultation_student_created"},
+		{"direct_messages", "log_id", "idx_dm_log_id"},
+		{"direct_messages", "log_id,created_at", "idx_dm_log_created"},
+		{"ai_chat_messages", "log_id", "idx_aichat_log_id"},
+		{"ai_chat_messages", "log_id,created_at", "idx_aichat_log_created"},
+		{"refresh_tokens", "user_id", "idx_refresh_user_id"},
+		{"refresh_tokens", "expires_at", "idx_refresh_expires"},
+	}
+
+	for _, idx := range indexes {
+		sql := fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s ON %s (%s)", idx.name, idx.table, idx.cols)
+		_ = database.Exec(sql).Error
+	}
+
 	sqlDB, err := database.DB()
 	if err == nil {
 		sqlDB.SetMaxIdleConns(15)

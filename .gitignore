@@ -50,10 +50,12 @@ storage/audio/*
 storage/transcript/*
 storage/feedback/*
 storage/paper/*
+storage/annotations/*
 !storage/audio/.gitkeep
 !storage/transcript/.gitkeep
 !storage/feedback/.gitkeep
 !storage/paper/.gitkeep
+!storage/annotations/.gitkeep
 
 # Scratch/Temporary
 scratch/

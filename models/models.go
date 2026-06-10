@@ -49,6 +49,7 @@ type User struct {
 	GeminiKey       string `gorm:"type:varchar(255)" json:"gemini_key"`
 	AnthropicKey    string `gorm:"type:varchar(255)" json:"anthropic_key"`
 	NvidiaKey       string `gorm:"type:varchar(255)" json:"nvidia_key"`
+	GroqKey         string `gorm:"type:varchar(255)" json:"groq_key"`
 	PreferredModel  string `gorm:"type:varchar(100);default:'default'" json:"preferred_model"`
 	IsGatewayActive bool   `gorm:"default:false" json:"is_gateway_active"`
 }

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"testing_go/models"
@@ -24,12 +25,18 @@ type AccessClaims struct {
 	Iat    int64           `json:"iat"`
 }
 
+var validatedSecret []byte
+var secretOnce sync.Once
+
 func jwtSecret() []byte {
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		secret = "tierlog-dev-secret"
-	}
-	return []byte(secret)
+	secretOnce.Do(func() {
+		secret := os.Getenv("JWT_SECRET")
+		if secret == "" || secret == "tierlog-dev-secret" || secret == "change-this-secret" || len(secret) < 32 {
+			panic("FATAL: JWT_SECRET is missing or insecure. Set a strong random secret (≥32 chars) in your .env file.")
+		}
+		validatedSecret = []byte(secret)
+	})
+	return validatedSecret
 }
 
 func accessTTL() time.Duration {

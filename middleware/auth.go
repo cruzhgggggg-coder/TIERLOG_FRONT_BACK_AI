@@ -37,6 +37,32 @@ func AuthRequired() gin.HandlerFunc {
 	}
 }
 
+func RoleRequired(allowedRoles ...models.UserRole) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user := CurrentUser(c)
+		if user == nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+			return
+		}
+		allowed := false
+		for _, role := range allowedRoles {
+			if user.Role == role {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
+			return
+		}
+		c.Next()
+	}
+}
+
+func AdminOnly() gin.HandlerFunc {
+	return RoleRequired(models.RoleLecturer)
+}
+
 func CurrentUser(c *gin.Context) *models.User {
 	value, ok := c.Get(userContextKey)
 	if !ok {

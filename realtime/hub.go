@@ -3,6 +3,7 @@ package realtime
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,21 +31,20 @@ type Client struct {
 	mu     sync.Mutex
 	rooms  map[string]bool
 	closed bool
+	done   chan struct{}
 }
 
 type Hub struct {
-	mu    sync.RWMutex
-	rooms map[string]map[*Client]bool
+	mu             sync.RWMutex
+	rooms          map[string]map[*Client]bool
+	allowedOrigins []string
 }
 
-func NewHub() *Hub {
+func NewHub(allowedOrigins []string) *Hub {
 	return &Hub{
-		rooms: make(map[string]map[*Client]bool),
+		rooms:          make(map[string]map[*Client]bool),
+		allowedOrigins: allowedOrigins,
 	}
-}
-
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
 func (h *Hub) HandleWebSocket(c *gin.Context) {
@@ -63,15 +63,31 @@ func (h *Hub) HandleWebSocket(c *gin.Context) {
 		return
 	}
 
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true
+			}
+			for _, allowed := range h.allowedOrigins {
+				if allowed == origin {
+					return true
+				}
+			}
+			return false
+		},
+	}
+
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}
 
 	client := &Client{
-		conn: conn,
-		user: &models.User{ID: claims.UserID, Role: claims.Role},
+		conn:  conn,
+		user:  &models.User{ID: claims.UserID, Role: claims.Role},
 		rooms: make(map[string]bool),
+		done:  make(chan struct{}),
 	}
 
 	go h.readLoop(client)
@@ -79,7 +95,10 @@ func (h *Hub) HandleWebSocket(c *gin.Context) {
 }
 
 func (h *Hub) readLoop(client *Client) {
-	defer h.disconnect(client)
+	defer func() {
+		h.disconnect(client)
+		close(client.done)
+	}()
 
 	for {
 		var msg clientMessage
@@ -90,11 +109,11 @@ func (h *Hub) readLoop(client *Client) {
 		switch msg.Action {
 		case "subscribe":
 			if msg.Room != "" {
-				h.subscribe(client, msg.Room)
+				h.subscribe(client, sanitizeRoom(msg.Room))
 			}
 		case "unsubscribe":
 			if msg.Room != "" {
-				h.unsubscribe(client, msg.Room)
+				h.unsubscribe(client, sanitizeRoom(msg.Room))
 			}
 		}
 	}
@@ -104,17 +123,22 @@ func (h *Hub) pingLoop(client *Client) {
 	ticker := time.NewTicker(25 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		client.mu.Lock()
-		if client.closed {
+	for {
+		select {
+		case <-client.done:
+			return
+		case <-ticker.C:
+			client.mu.Lock()
+			if client.closed {
+				client.mu.Unlock()
+				return
+			}
+			err := client.conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(10*time.Second))
 			client.mu.Unlock()
-			return
-		}
-		err := client.conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(10*time.Second))
-		client.mu.Unlock()
-		if err != nil {
-			h.disconnect(client)
-			return
+			if err != nil {
+				h.disconnect(client)
+				return
+			}
 		}
 	}
 }
@@ -177,10 +201,13 @@ func (h *Hub) Broadcast(room, event string, data any) {
 	}
 
 	h.mu.RLock()
-	clients := h.rooms[room]
+	clients := make([]*Client, 0, len(h.rooms[room]))
+	for c := range h.rooms[room] {
+		clients = append(clients, c)
+	}
 	h.mu.RUnlock()
 
-	for client := range clients {
+	for _, client := range clients {
 		client.mu.Lock()
 		if client.closed {
 			client.mu.Unlock()
@@ -192,4 +219,13 @@ func (h *Hub) Broadcast(room, event string, data any) {
 			h.disconnect(client)
 		}
 	}
+}
+
+func sanitizeRoom(room string) string {
+	return strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '-' || r == '_' {
+			return r
+		}
+		return -1
+	}, room)
 }
