@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useAuthStore } from '@/stores/auth';
-import type { ConsultationLog, FeedbackItem } from '@/types';
+import type { ConsultationLog, FeedbackItem, FeedbackComment } from '@/types';
 import RequireAuth from '@/components/RequireAuth.vue';
 import NavBar from '@/components/NavBar.vue';
 import UiPage from '@/components/UiPage.vue';
@@ -9,6 +9,8 @@ import UiHeading from '@/components/UiHeading.vue';
 import UiCard from '@/components/UiCard.vue';
 import UiBadge from '@/components/UiBadge.vue';
 import UiButton from '@/components/UiButton.vue';
+import ConfirmDialog from '@/components/ConfirmDialog.vue';
+import RejectionDialog from '@/components/RejectionDialog.vue';
 import {
   CheckCircleIcon,
   ClockIcon,
@@ -52,6 +54,7 @@ interface ToastItem {
 }
 
 const auth = useAuthStore();
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8080';
 const isLecturer = computed(() => auth.user?.role === 'lecturer');
 const isStudent = computed(() => auth.user?.role === 'student');
 
@@ -60,13 +63,46 @@ const consultations = ref<ConsultationLog[]>([]);
 const selectedConsultation = ref<ConsultationLog | null>(null);
 const studentSubmissions = ref<StudentSubmission[]>([]);
 
-const activeCenterTab = ref<'feedback' | 'transcript' | 'annotations' | 'drafts'>('feedback');
+const activeCenterTab = ref<'feedback' | 'transcript' | 'annotations' | 'drafts' | 'final'>('feedback');
 const chatMode = ref<'oracle' | 'advisor'>('oracle');
 const chatMessages = ref<ChatMessage[]>([]);
 const chatInput = ref('');
 const chatLoading = ref(false);
 const drafts = ref<DraftItem[]>([]);
 const toasts = ref<ToastItem[]>([]);
+
+// ── Confirm Dialog State ──
+const confirmDialogOpen = ref(false);
+const confirmDialogTitle = ref('');
+const confirmDialogMessage = ref('');
+const confirmDialogDanger = ref(false);
+const confirmDialogConfirmLabel = ref('Confirm');
+let confirmDialogResolve: ((value: boolean) => void) | null = null;
+
+function showConfirm(title: string, message: string, danger = false, confirmLabel = 'Confirm'): Promise<boolean> {
+  return new Promise((resolve) => {
+    confirmDialogTitle.value = title;
+    confirmDialogMessage.value = message;
+    confirmDialogDanger.value = danger;
+    confirmDialogConfirmLabel.value = confirmLabel;
+    confirmDialogResolve = resolve;
+    confirmDialogOpen.value = true;
+  });
+}
+
+function onConfirmDialogAction(confirmed: boolean) {
+  confirmDialogOpen.value = false;
+  confirmDialogResolve?.(confirmed);
+  confirmDialogResolve = null;
+}
+
+// ── Comment Thread State ──
+const expandedCommentThreads = ref<Set<number>>(new Set());
+const commentInputs = ref<Record<number, string>>({});
+const commentLoading = ref<Record<number, boolean>>({});
+
+const rejectionDialogOpen = ref(false);
+const rejectionFeedbackItem = ref<FeedbackItem | null>(null);
 
 const uploadForm = reactive({
   paper: null as File | null,
@@ -76,12 +112,15 @@ const uploadForm = reactive({
 const uploading = ref(false);
 
 const feedbackItems = ref<FeedbackItem[]>([]);
+const finalDraftFile = ref<File | null>(null);
+const finalUploading = ref(false);
 const evaluatingFeedbackId = ref<number | null>(null);
 const evalContent = ref('');
 const evalCategory = ref<'Major' | 'Minor'>('Major');
 
 const archiveDropdownOpen = ref(false);
 const messagesEndRef = ref<HTMLElement | null>(null);
+const chatContainer = ref<HTMLElement | null>(null);
 const feedbackCategoryFilter = ref<'all' | 'Major' | 'Minor'>('all');
 
 const selectedConsultationLabel = computed(() => {
@@ -104,7 +143,7 @@ const feedbackCounts = computed(() => {
 function categoryColor(cat: string): string {
   return cat === 'Major'
     ? 'bg-red-500/15 text-red-400 ring-red-500/30'
-    : 'bg-amber-500/15 text-amber-400 ring-amber-500/30';
+    : 'bg-stone-400/15 text-stone-400 ring-stone-500/30';
 }
 
 function statusColor(status: string): string {
@@ -113,6 +152,8 @@ function statusColor(status: string): string {
     return 'bg-emerald-500/15 text-emerald-400 ring-emerald-500/30';
   if (lower === 'pending')
     return 'bg-amber-500/15 text-amber-400 ring-amber-500/30';
+  if (lower === 'rejected')
+    return 'bg-red-500/15 text-red-400 ring-red-500/30';
   return 'bg-indigo-500/15 text-indigo-400 ring-indigo-500/30';
 }
 
@@ -153,7 +194,9 @@ function showToast(message: string, type: ToastItem['type'] = 'info') {
 
 function scrollToChatBottom() {
   nextTick(() => {
-    messagesEndRef.value?.scrollIntoView({ behavior: 'smooth' });
+    if (chatContainer.value) {
+      chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+    }
   });
 }
 
@@ -286,6 +329,54 @@ async function handleUpload() {
   uploading.value = false;
 }
 
+function onFinalFileChange(event: Event) {
+  const input = event.target as HTMLInputElement;
+  if (input.files && input.files.length > 0) {
+    finalDraftFile.value = input.files[0];
+  }
+}
+
+async function handleFinalUpload() {
+  if (!selectedConsultation.value) {
+    showToast('No consultation session selected', 'error');
+    return;
+  }
+  if (!finalDraftFile.value) {
+    showToast('Please select a docx file first', 'error');
+    return;
+  }
+  finalUploading.value = true;
+  const formData = new FormData();
+  formData.append('file', finalDraftFile.value);
+
+  try {
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8080';
+    const res = await fetch(`${apiUrl}/consultations/${selectedConsultation.value.id}/final`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${auth.accessToken}`,
+      },
+      body: formData,
+    });
+    if (res.ok) {
+      showToast('Final draft uploaded successfully', 'success');
+      finalDraftFile.value = null;
+      // Reset input element
+      const fileInput = document.getElementById('final-draft-input') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+      
+      // Refresh drafts
+      fetchDrafts(selectedConsultation.value.id);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      showToast(data.error || 'Upload failed', 'error');
+    }
+  } catch {
+    showToast('Upload failed — network error', 'error');
+  }
+  finalUploading.value = false;
+}
+
 // ── Image Compression ──
 
 function compressImage(
@@ -362,9 +453,13 @@ async function onFileSelect(field: 'paper' | 'audio' | 'annotations', event: Eve
 // ── Session Deletion ──
 
 async function deleteSession(logId: number) {
-  if (!confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
-    return;
-  }
+  const confirmed = await showConfirm(
+    'Delete Session',
+    'Are you sure you want to delete this session? This action cannot be undone.',
+    true,
+    'Delete',
+  );
+  if (!confirmed) return;
   const res = await auth.api(`/consultations/${logId}`, { method: 'DELETE' });
   if (res.ok) {
     showToast('Session deleted', 'success');
@@ -378,14 +473,32 @@ async function deleteSession(logId: number) {
 }
 
 async function toggleFeedbackStatus(item: FeedbackItem) {
-  const newStatus = item.status === 'Fixed' ? 'Pending' : 'Fixed';
+  // Allow marking Pending or Rejected → Fixed
+  if (item.status !== 'Pending' && item.status !== 'Rejected') return;
+
+  const confirmed = await showConfirm(
+    'Tandai Revisi Selesai',
+    'Apakah Anda yakin telah menyelesaikan revisi ini? Setelah ditandai selesai, Anda tidak dapat mengubahnya kembali dan akan dikirim ke dosen untuk ditinjau.',
+    false,
+    'FIX'
+  );
+  if (!confirmed) {
+    // Reset visual checked state reactively
+    const originalStatus = item.status;
+    item.status = 'Fixed'; // trigger update
+    nextTick(() => {
+      item.status = originalStatus;
+    });
+    return;
+  }
+
   const res = await auth.api(`/consultations/feedback/${item.id}/status`, {
     method: 'PUT',
-    body: JSON.stringify({ status: newStatus, log_id: item.consultation_log_id }),
+    body: JSON.stringify({ status: 'Fixed', log_id: item.consultation_log_id }),
   });
   if (res.ok) {
-    item.status = newStatus;
-    showToast(`Marked as ${newStatus}`, 'success');
+    item.status = 'Fixed';
+    showToast('Marked as Fixed', 'success');
   } else {
     showToast('Failed to update status', 'error');
   }
@@ -543,17 +656,31 @@ async function validateFeedback(item: FeedbackItem) {
   }
 }
 
-async function rejectFeedback(item: FeedbackItem) {
+function openRejectionDialog(item: FeedbackItem) {
+  rejectionFeedbackItem.value = item;
+  rejectionDialogOpen.value = true;
+}
+
+async function handleRejectConfirm(comment: string) {
+  if (!rejectionFeedbackItem.value) return;
+  const item = rejectionFeedbackItem.value;
+  rejectionDialogOpen.value = false;
+
   const res = await auth.api(`/consultations/feedback/${item.id}/status`, {
     method: 'PUT',
-    body: JSON.stringify({ status: 'Pending', log_id: item.consultation_log_id }),
+    body: JSON.stringify({ 
+      status: 'Rejected', 
+      log_id: item.consultation_log_id,
+      comment: comment
+    }),
   });
   if (res.ok) {
-    item.status = 'Pending';
-    showToast('Feedback returned to pending', 'success');
+    item.status = 'Rejected';
+    showToast('Feedback rejected', 'success');
   } else {
     showToast('Rejection failed', 'error');
   }
+  rejectionFeedbackItem.value = null;
 }
 
 async function undoFeedbackAction(item: FeedbackItem) {
@@ -567,6 +694,51 @@ async function undoFeedbackAction(item: FeedbackItem) {
   } else {
     showToast('Undo failed', 'error');
   }
+}
+
+// ── Comment Thread Functions ──
+
+function toggleCommentThread(feedbackId: number) {
+  if (expandedCommentThreads.value.has(feedbackId)) {
+    expandedCommentThreads.value.delete(feedbackId);
+  } else {
+    expandedCommentThreads.value.add(feedbackId);
+  }
+}
+
+async function submitComment(item: FeedbackItem) {
+  const content = commentInputs.value[item.id]?.trim();
+  if (!content) return;
+  commentLoading.value[item.id] = true;
+
+  const res = await auth.api<{ data: FeedbackComment }>(
+    `/consultations/feedback/${item.id}/comments`,
+    { method: 'POST', body: JSON.stringify({ content }) },
+  );
+
+  if (res.ok && res.data) {
+    const comment = res.data.data ?? res.data;
+    if (!item.comments) item.comments = [];
+    // Avoid duplicates
+    if (!item.comments.some((c) => c.id === (comment as FeedbackComment).id)) {
+      item.comments.push(comment as FeedbackComment);
+    }
+    commentInputs.value[item.id] = '';
+    showToast('Comment sent', 'success');
+  } else {
+    showToast('Failed to send comment', 'error');
+  }
+  commentLoading.value[item.id] = false;
+}
+
+function commentSenderLabel(comment: FeedbackComment): string {
+  return comment.sender_role === 'student' ? 'Student' : 'Lecturer';
+}
+
+function commentSenderColor(comment: FeedbackComment): string {
+  return comment.sender_role === 'student'
+    ? 'bg-amber-500/10 text-amber-400'
+    : 'bg-indigo-500/10 text-indigo-400';
 }
 
 function startEvaluate(item: FeedbackItem) {
@@ -631,6 +803,23 @@ function connectWebSocket() {
           fetchConsultations();
           if (payload.event === 'feedback.new') {
             showToast('New feedback received', 'info');
+          }
+        }
+        if (payload.event === 'feedback.comment.new') {
+          const commentData = payload.data;
+          if (!commentData) return;
+          // Append comment to the correct feedback item in the local state
+          const targetItem = feedbackItems.value.find(
+            (f) => f.id === commentData.feedback_item_id,
+          );
+          if (targetItem) {
+            if (!targetItem.comments) targetItem.comments = [];
+            if (!targetItem.comments.some((c) => c.id === commentData.id)) {
+              targetItem.comments.push(commentData);
+            }
+          }
+          if (commentData.sender_role !== auth.user?.role) {
+            showToast('New comment on feedback', 'info');
           }
         }
         if (payload.event === 'chat.direct-message') {
@@ -877,7 +1066,22 @@ onUnmounted(() => {
                     <div class="border-t border-white/[0.04]" />
                     <div class="flex items-center justify-between text-sm">
                       <span class="text-stone-600">Paper</span>
-                      <span class="max-w-[140px] truncate text-stone-300">{{ selectedConsultation.paper_filename }}</span>
+                      <div class="flex items-center gap-2">
+                        <span class="max-w-[140px] truncate text-stone-300">{{ selectedConsultation.paper_filename }}</span>
+                        <a
+                          :href="`${API_URL}/storage/paper/${selectedConsultation.paper_filename}`"
+                          target="_blank"
+                          download
+                          class="inline-flex h-6 w-6 items-center justify-center rounded bg-[#1c1c1e] text-stone-400 hover:bg-[#2c2c2e] hover:text-stone-200 transition-colors"
+                          title="Download Paper"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                          </svg>
+                        </a>
+                      </div>
                     </div>
                     <div class="border-t border-white/[0.04]" />
                     <div class="flex items-center justify-between text-sm">
@@ -911,7 +1115,7 @@ onUnmounted(() => {
                 <div class="border-b border-white/[0.04]">
                   <div class="flex gap-0.5 px-4 pt-3">
                     <button
-                      v-for="tab in (['feedback', 'transcript', 'annotations', 'drafts'] as const)"
+                      v-for="tab in (['feedback', 'transcript', 'annotations', 'drafts', 'final'] as const)"
                       :key="tab"
                       :class="[
                         'rounded-lg px-4 py-2 text-[13px] font-medium transition-colors duration-100',
@@ -960,7 +1164,7 @@ onUnmounted(() => {
                         ]"
                         @click="feedbackCategoryFilter = filter"
                       >
-                        {{ filter === 'all' ? 'All' : filter }}
+                        {{ filter === 'all' ? 'All' : filter === 'Major' ? 'HOC' : 'LOC' }}
                         <span class="ml-0.5 text-[10px] text-stone-700">
                           {{ filter === 'all' ? feedbackCounts.total : filter === 'Major' ? feedbackCounts.major : feedbackCounts.minor }}
                         </span>
@@ -976,15 +1180,16 @@ onUnmounted(() => {
                         <label class="mt-0.5 flex shrink-0 cursor-pointer items-center">
                           <input
                             type="checkbox"
-                            :checked="item.status === 'Fixed'"
-                            class="h-4 w-4 rounded border-zinc-600 bg-[#1c1c1e] text-amber-500 focus:ring-amber-500/40"
+                            :checked="item.status === 'Fixed' || item.status === 'Validated'"
+                            :disabled="item.status === 'Validated' || item.status === 'Fixed'"
+                            class="h-4 w-4 rounded border-zinc-600 bg-[#1c1c1e] text-amber-500 focus:ring-amber-500/40 disabled:cursor-not-allowed disabled:opacity-40"
                             @change="toggleFeedbackStatus(item)"
                           />
                         </label>
                         <div class="min-w-0 flex-1">
                           <p class="text-sm leading-relaxed text-stone-300">{{ item.content }}</p>
                           <div class="mt-2.5 flex flex-wrap items-center gap-1.5">
-                            <UiBadge :text="item.category" :color="categoryColor(item.category)" />
+                            <UiBadge :text="item.category === 'Major' ? 'HOC' : 'LOC'" :color="categoryColor(item.category)" />
                             <UiBadge :text="item.status" :color="statusColor(item.status)" />
                           </div>
                         </div>
@@ -999,6 +1204,64 @@ onUnmounted(() => {
                           </svg>
                           AI Revision
                         </button>
+                        <button
+                          class="inline-flex items-center gap-1.5 rounded-md bg-[#1c1c1e] px-3 py-1.5 text-xs font-medium text-stone-300 transition-colors hover:bg-[#2c2c2e]"
+                          @click="toggleCommentThread(item.id)"
+                        >
+                          <svg class="h-3.5 w-3.5 text-stone-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                          </svg>
+                          Balas
+                          <span v-if="item.comments?.length" class="text-[10px] text-stone-600">({{ item.comments.length }})</span>
+                        </button>
+                      </div>
+
+                      <!-- Comment Thread -->
+                      <div
+                        v-if="expandedCommentThreads.has(item.id)"
+                        class="mt-3 space-y-2.5 border-t border-white/[0.04] pt-3"
+                      >
+                        <div
+                          v-for="comment in item.comments ?? []"
+                          :key="comment.id"
+                          class="flex gap-2.5"
+                        >
+                          <div
+                            :class="[
+                              'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold',
+                              commentSenderColor(comment),
+                            ]"
+                          >
+                            {{ comment.sender_role === 'student' ? 'S' : 'L' }}
+                          </div>
+                          <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                              <span class="text-[11px] font-medium text-stone-400">{{ commentSenderLabel(comment) }}</span>
+                              <span class="text-[10px] text-stone-700">{{ formatTime(comment.created_at) }}</span>
+                            </div>
+                            <p class="mt-0.5 text-sm leading-relaxed text-stone-300">{{ comment.content }}</p>
+                          </div>
+                        </div>
+
+                        <div class="flex gap-2">
+                          <input
+                            v-model="commentInputs[item.id]"
+                            type="text"
+                            placeholder="Tulis balasan..."
+                            class="flex-1 rounded-lg border border-white/[0.04] bg-[#0a0a0b] px-3 py-2 text-xs text-stone-200 placeholder-stone-600 transition-colors focus:border-amber-500/30 focus:outline-none focus:ring-1 focus:ring-amber-500/10"
+                            @keyup.enter="submitComment(item)"
+                          />
+                          <button
+                            :disabled="!commentInputs[item.id]?.trim() || commentLoading[item.id]"
+                            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-[#0a0a0b] transition-all hover:bg-amber-400 disabled:opacity-30"
+                            @click="submitComment(item)"
+                          >
+                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="M22 2L11 13" />
+                              <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -1076,10 +1339,70 @@ onUnmounted(() => {
                         <p class="text-sm font-medium text-stone-200">{{ draft.filename }}</p>
                         <p class="text-[11px] text-stone-600">{{ formatDate(draft.created_at) }}</p>
                       </div>
-                      <ChevronRightIcon :size="14" class="text-stone-700" />
+                      <a
+                        :href="`${API_URL}/storage/annotations/${draft.filename}`"
+                        target="_blank"
+                        download
+                        class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#1c1c1e] text-stone-400 hover:bg-[#2c2c2e] hover:text-stone-200 transition-colors"
+                        title="Download Draft"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                      </a>
                     </div>
                     <div v-if="drafts.length === 0" class="py-12 text-center">
                       <p class="text-sm text-stone-600">No drafts yet.</p>
+                    </div>
+                  </div>
+
+                  <div v-if="activeCenterTab === 'final'" class="space-y-4">
+                    <div class="rounded-xl border border-white/[0.04] bg-[#141415] p-5">
+                       <div class="mb-4 flex items-center gap-2.5">
+                         <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
+                           <svg class="h-4 w-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                             <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                             <polyline points="14 2 14 8 20 8" />
+                             <line x1="16" y1="13" x2="8" y2="13" />
+                             <line x1="16" y1="17" x2="8" y2="17" />
+                           </svg>
+                         </div>
+                         <div>
+                           <h3 class="text-sm font-semibold text-stone-100 font-[family-name:var(--font-display)]">Final Document</h3>
+                           <p class="text-[11px] text-stone-600">Upload your revised final document after all feedback is addressed</p>
+                         </div>
+                       </div>
+                       <div class="rounded-lg border border-dashed border-white/[0.08] bg-[#0a0a0b] p-6 text-center">
+                         <svg class="mx-auto h-8 w-8 text-stone-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                           <polyline points="17 8 12 3 7 8" />
+                           <line x1="12" y1="3" x2="12" y2="15" />
+                         </svg>
+                         <p class="mt-2 text-sm text-stone-500">Drag & drop your final .docx here or click to browse</p>
+                         <p class="mt-1 text-[11px] text-stone-700">Maximum file size: 20 MB</p>
+                         <input
+                           id="final-draft-input"
+                           type="file"
+                           accept=".docx"
+                           class="mt-3 w-full cursor-pointer rounded-lg border border-white/[0.04] bg-[#1c1c1e] px-3.5 py-2.5 text-xs text-stone-300 transition-colors file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-emerald-500/10 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-emerald-400 hover:file:bg-emerald-500/15 focus:border-emerald-500/40 focus:outline-none focus:ring-1 focus:ring-emerald-500/20"
+                           @change="onFinalFileChange"
+                         />
+                         <div v-if="finalDraftFile" class="mt-4 flex items-center justify-between rounded-lg bg-[#1c1c1e] p-3 text-left">
+                           <div class="min-w-0 flex-1">
+                             <p class="truncate text-xs font-semibold text-stone-200">{{ finalDraftFile.name }}</p>
+                             <p class="text-[10px] text-stone-500">{{ formatFileSize(finalDraftFile.size) }}</p>
+                           </div>
+                           <button
+                             :disabled="finalUploading"
+                             class="ml-3 shrink-0 rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-[#0a0a0b] transition-all hover:bg-emerald-400 disabled:opacity-40"
+                             @click="handleFinalUpload"
+                           >
+                             {{ finalUploading ? 'Uploading...' : 'Submit Draft' }}
+                           </button>
+                         </div>
+                       </div>
                     </div>
                   </div>
                 </div>
@@ -1115,7 +1438,7 @@ onUnmounted(() => {
                   </div>
                 </div>
 
-                <div class="flex-1 scroll-area p-4">
+                <div ref="chatContainer" class="flex-1 scroll-area p-4">
                   <div v-if="chatMessages.length === 0" class="flex h-full flex-col items-center justify-center">
                     <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-[#141415]">
                       <svg v-if="chatMode === 'oracle'" class="h-5 w-5 text-stone-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1397,18 +1720,18 @@ onUnmounted(() => {
                             ]"
                             @click="evalCategory = 'Major'"
                           >
-                            Major
+                            HOC (Major)
                           </button>
                           <button
                             :class="[
                               'rounded-lg px-4 py-2 text-xs font-medium transition-colors',
                               evalCategory === 'Minor'
-                                ? 'bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/30'
+                                ? 'bg-stone-400/10 text-stone-400 ring-1 ring-stone-500/30'
                                 : 'bg-[#1c1c1e] text-stone-500 hover:text-stone-300',
                             ]"
                             @click="evalCategory = 'Minor'"
                           >
-                            Minor
+                            LOC (Minor)
                           </button>
                         </div>
                       </div>
@@ -1424,7 +1747,7 @@ onUnmounted(() => {
                           title="Reject"
                           tone="danger"
                           :disabled="!evaluatingFeedbackId"
-                          @click="rejectFeedback(feedbackItems.find((f) => f.id === evaluatingFeedbackId)!)!"
+                          @click="openRejectionDialog(feedbackItems.find((f) => f.id === evaluatingFeedbackId)!)!"
                         />
                         <UiButton
                           title="Undo"
@@ -1476,6 +1799,25 @@ onUnmounted(() => {
           </div>
         </TransitionGroup>
       </div>
+
+      <ConfirmDialog
+        :open="confirmDialogOpen"
+        :title="confirmDialogTitle"
+        :message="confirmDialogMessage"
+        :danger="confirmDialogDanger"
+        :confirm-label="confirmDialogConfirmLabel"
+        @confirm="onConfirmDialogAction(true)"
+        @cancel="onConfirmDialogAction(false)"
+      />
+      <RejectionDialog
+        :open="rejectionDialogOpen"
+        title="Reject Revision"
+        message="Are you sure you want to reject this revision? Please provide an explanation for the student."
+        confirm-label="Reject Revision"
+        cancel-label="Cancel"
+        @confirm="handleRejectConfirm"
+        @cancel="rejectionDialogOpen = false"
+      />
     </UiPage>
   </RequireAuth>
 </template>

@@ -31,6 +31,7 @@ const (
 	StatusFixed     FeedbackStatus = "Fixed"
 	StatusPending   FeedbackStatus = "Pending"
 	StatusValidated FeedbackStatus = "Validated"
+	StatusRejected  FeedbackStatus = "Rejected"
 )
 
 type User struct {
@@ -125,9 +126,21 @@ type FeedbackItem struct {
 	ConsultationLogID uint64           `gorm:"column:log_id;not null" json:"consultation_log_id"`
 	Content           string           `gorm:"type:text;not null" json:"content"`
 	Category          FeedbackCategory `gorm:"type:enum('Minor','Major');not null" json:"category"`
-	Status            FeedbackStatus   `gorm:"type:enum('Fixed','Pending','Validated');not null;default:'Pending'" json:"status"`
+	Status            FeedbackStatus   `gorm:"type:enum('Fixed','Pending','Validated','Rejected');not null;default:'Pending'" json:"status"`
 	CreatedAt         time.Time        `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt         time.Time        `gorm:"autoUpdateTime" json:"updated_at"`
+
+	Comments []FeedbackComment `gorm:"foreignKey:FeedbackItemID;constraint:OnDelete:CASCADE" json:"comments,omitempty"`
+}
+
+// FeedbackComment stores threaded discussion on a specific FeedbackItem.
+type FeedbackComment struct {
+	ID             uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
+	FeedbackItemID uint64    `gorm:"column:feedback_item_id;not null;index" json:"feedback_item_id"`
+	SenderID       uint64    `gorm:"not null" json:"sender_id"`
+	SenderRole     string    `gorm:"type:varchar(20);not null" json:"sender_role"` // "student" or "lecturer"
+	Content        string    `gorm:"type:text;not null" json:"content"`
+	CreatedAt      time.Time `gorm:"autoCreateTime" json:"created_at"`
 }
 
 // RevisionAnnotation stores annotated revision files uploaded by students (images of marked pages or docx with track changes)

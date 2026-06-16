@@ -26,6 +26,7 @@ func init() {
 		"storage/transcript",
 		"storage/paper",
 		"storage/annotations",
+		"storage/final",
 	}
 
 	for _, folder := range folders {
@@ -153,12 +154,16 @@ func main() {
 		protected.POST("/consultations", testing_middleware.RoleRequired("student"), controller.CreateConsultationV2)
 		protected.POST("/consultations/chat", controller.ConsultationChatV2)
 		protected.PUT("/consultations/feedback/:id/status", controller.UpdateFeedbackStatusV2)
+		protected.GET("/consultations/feedback/:id/comments", controller.GetFeedbackComments)
+		protected.POST("/consultations/feedback/:id/comments", controller.AddFeedbackComment)
 		protected.POST("/consultations/:id/add-feedback", testing_middleware.RoleRequired("lecturer"), controller.LecturerAddFeedbackV2)
 		protected.GET("/consultations/:id/direct-messages", controller.GetDirectMessages)
 		protected.POST("/consultations/:id/direct-messages", controller.SendDirectMessage)
 		protected.GET("/consultations/:id/ai-chats", controller.GetAIChats)
 		protected.POST("/consultations/:id/classify-feedback", testing_middleware.RoleRequired("student"), controller.ClassifyFeedbackV2)
 		protected.DELETE("/consultations/:id", controller.DeleteConsultationV2)
+		protected.GET("/consultations/:id/drafts", controller.GetConsultationDraftsV2)
+		protected.POST("/consultations/:id/final", testing_middleware.RoleRequired("student"), controller.UploadFinalDraftV2)
 		protected.GET("/lecturer/consultations", testing_middleware.RoleRequired("lecturer"), controller.LecturerConsultationsV2)
 		protected.GET("/lecturer/students", testing_middleware.RoleRequired("lecturer"), controller.LecturerStudentsV2)
 		protected.GET("/lecturer/student/:id/sessions", testing_middleware.RoleRequired("lecturer"), controller.LecturerStudentSessions)

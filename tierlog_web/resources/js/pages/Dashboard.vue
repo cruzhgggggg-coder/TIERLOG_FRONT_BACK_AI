@@ -254,7 +254,7 @@ onUnmounted(() => {
                     </div>
                     <div class="min-w-0 flex-1">
                       <div class="mb-1 flex items-center gap-1.5">
-                        <UiBadge :text="quest.category" :color="quest.category === 'Major' ? '#ef4444' : '#71717a'" />
+                        <UiBadge :text="quest.category === 'Major' ? 'HOC' : 'LOC'" />
                         <UiBadge
                           :text="quest.status === 'Validated' ? 'Approved' : quest.status === 'Fixed' ? 'Submitted' : 'Pending'"
                         />

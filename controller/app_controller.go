@@ -545,7 +545,7 @@ func DashboardStatsV2(c *gin.Context) {
 
 func accessibleLog(user *models.User, logID uint64) (*models.ConsultationLog, error) {
 	var log models.ConsultationLog
-	query := koneksi.DB.Preload("FeedbackItems").Preload("Student").Preload("Student.User").Preload("Student.Lecturer")
+	query := koneksi.DB.Preload("FeedbackItems").Preload("FeedbackItems.Comments").Preload("Student").Preload("Student.User").Preload("Student.Lecturer")
 
 	switch user.Role {
 	case models.RoleStudent:
@@ -569,6 +569,7 @@ func ConsultationListV2(c *gin.Context) {
 	query := queryScopeForUser(
 		koneksi.DB.
 			Preload("FeedbackItems").
+			Preload("FeedbackItems.Comments").
 			Preload("RevisionAnnotations").
 			Preload("Student").
 			Preload("Student.User").
@@ -906,8 +907,9 @@ func UpdateFeedbackStatusV2(c *gin.Context) {
 	id := c.Param("id")
 
 	var req struct {
-		Status string `json:"status" binding:"required"`
-		LogID  uint64 `json:"log_id"`
+		Status  string `json:"status" binding:"required"`
+		LogID   uint64 `json:"log_id"`
+		Comment string `json:"comment"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
@@ -920,8 +922,8 @@ func UpdateFeedbackStatusV2(c *gin.Context) {
 			return
 		}
 	} else if user.Role == models.RoleLecturer {
-		if req.Status != string(models.StatusValidated) && req.Status != string(models.StatusPending) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Lecturers can only validate (Validated) or return status to Pending"})
+		if req.Status != string(models.StatusValidated) && req.Status != string(models.StatusPending) && req.Status != string(models.StatusRejected) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Lecturers can validate (Validated), return to Pending, or reject (Rejected)"})
 			return
 		}
 	} else {
@@ -947,12 +949,36 @@ func UpdateFeedbackStatusV2(c *gin.Context) {
 		return
 	}
 
+	if req.Status == string(models.StatusRejected) && req.Comment != "" {
+		comment := models.FeedbackComment{
+			FeedbackItemID: feedback.ID,
+			SenderID:       user.ID,
+			SenderRole:     string(user.Role),
+			Content:        req.Comment,
+		}
+		if err := koneksi.DB.Create(&comment).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		// Broadcast comment via WebSocket
+		if WebSocketHub != nil {
+			WebSocketHub.Broadcast("consultation."+strconv.FormatUint(log.ID, 10), "feedback.comment.new", gin.H{
+				"id":               comment.ID,
+				"feedback_item_id": comment.FeedbackItemID,
+				"sender_id":        comment.SenderID,
+				"sender_role":      comment.SenderRole,
+				"content":          comment.Content,
+				"created_at":       comment.CreatedAt,
+			})
+		}
+	}
+
 	payload := gin.H{
-		"feedback_id":      feedback.ID,
-		"log_id":           feedback.ConsultationLogID,
+		"feedback_id":         feedback.ID,
+		"log_id":              feedback.ConsultationLogID,
 		"consultation_log_id": feedback.ConsultationLogID,
-		"status":           feedback.Status,
-		"updated_by_role":  user.Role,
+		"status":              feedback.Status,
+		"updated_by_role":     user.Role,
 	}
 
 	if WebSocketHub != nil {
@@ -970,7 +996,7 @@ func LecturerConsultationsV2(c *gin.Context) {
 	}
 
 	var logs []models.ConsultationLog
-	if err := koneksi.DB.Preload("FeedbackItems").Preload("Student").Preload("Student.User").
+	if err := koneksi.DB.Preload("FeedbackItems").Preload("FeedbackItems.Comments").Preload("Student").Preload("Student.User").Preload("RevisionAnnotations").
 		Joins("JOIN students ON students.id = consultation_logs.student_id").
 		Where("students.lecturer_id = ?", user.Lecturer.ID).
 		Order("consultation_logs.created_at desc").
@@ -1313,8 +1339,14 @@ Return ONLY valid JSON in this exact shape — no explanation, no markdown, no e
 	}
 
 	for _, cl := range finalClassifications {
-		if cl.Category == "Major" || cl.Category == "Minor" {
-			koneksi.DB.Model(&models.FeedbackItem{}).Where("id = ? AND log_id = ?", cl.ID, log.ID).Update("category", cl.Category)
+		cat := cl.Category
+		if strings.ToLower(cat) == "major" {
+			cat = "Major"
+		} else if strings.ToLower(cat) == "minor" {
+			cat = "Minor"
+		}
+		if cat == "Major" || cat == "Minor" {
+			koneksi.DB.Model(&models.FeedbackItem{}).Where("id = ? AND log_id = ?", cl.ID, log.ID).Update("category", cat)
 		}
 	}
 
@@ -1429,6 +1461,101 @@ func DeleteConsultationV2(c *gin.Context) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  FEEDBACK COMMENTS (Threaded Discussion)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GetFeedbackComments returns all comments for a given feedback item.
+func GetFeedbackComments(c *gin.Context) {
+	user := middleware.CurrentUser(c)
+	feedbackIDStr := c.Param("id")
+	feedbackID, err := strconv.ParseUint(feedbackIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid feedback ID"})
+		return
+	}
+
+	// Verify the feedback item exists and is accessible
+	var feedback models.FeedbackItem
+	if err := koneksi.DB.First(&feedback, feedbackID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Feedback item not found"})
+		return
+	}
+
+	if _, err := accessibleLog(user, feedback.ConsultationLogID); err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	var comments []models.FeedbackComment
+	if err := koneksi.DB.Where("feedback_item_id = ?", feedbackID).
+		Order("created_at asc").
+		Find(&comments).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": comments})
+}
+
+// AddFeedbackComment creates a new comment on a feedback item and broadcasts via WebSocket.
+func AddFeedbackComment(c *gin.Context) {
+	user := middleware.CurrentUser(c)
+	feedbackIDStr := c.Param("id")
+	feedbackID, err := strconv.ParseUint(feedbackIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid feedback ID"})
+		return
+	}
+
+	var req struct {
+		Content string `json:"content" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Verify the feedback item exists and is accessible
+	var feedback models.FeedbackItem
+	if err := koneksi.DB.First(&feedback, feedbackID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Feedback item not found"})
+		return
+	}
+
+	log, err := accessibleLog(user, feedback.ConsultationLogID)
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	comment := models.FeedbackComment{
+		FeedbackItemID: feedbackID,
+		SenderID:       user.ID,
+		SenderRole:     string(user.Role),
+		Content:        req.Content,
+	}
+
+	if err := koneksi.DB.Create(&comment).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Broadcast comment via WebSocket
+	if WebSocketHub != nil {
+		WebSocketHub.Broadcast("consultation."+strconv.FormatUint(log.ID, 10), "feedback.comment.new", gin.H{
+			"id":              comment.ID,
+			"feedback_item_id": comment.FeedbackItemID,
+			"sender_id":       comment.SenderID,
+			"sender_role":     comment.SenderRole,
+			"content":         comment.Content,
+			"created_at":      comment.CreatedAt,
+		})
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "Comment added", "data": comment})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  SESSION-BASED FILTERING
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1456,7 +1583,7 @@ func LecturerStudentSessions(c *gin.Context) {
 	}
 
 	var logs []models.ConsultationLog
-	if err := koneksi.DB.Preload("FeedbackItems").
+	if err := koneksi.DB.Preload("FeedbackItems").Preload("FeedbackItems.Comments").
 		Where("student_id = ?", student.ID).
 		Order("created_at asc").
 		Find(&logs).Error; err != nil {
@@ -1492,4 +1619,117 @@ func LecturerStudentSessions(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": sessions})
+}
+
+// GetConsultationDraftsV2 returns all docx revision annotations (draft versions) for a consultation log
+func GetConsultationDraftsV2(c *gin.Context) {
+	user := middleware.CurrentUser(c)
+	logIDStr := c.Param("id")
+	logID, err := strconv.ParseUint(logIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid consultation log ID"})
+		return
+	}
+
+	log, err := accessibleLog(user, logID)
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	type DraftItem struct {
+		ID                uint64    `json:"id"`
+		ConsultationLogID uint64    `json:"consultation_log_id"`
+		Version           int       `json:"version"`
+		Filename          string    `json:"filename"`
+		CreatedAt         time.Time `json:"created_at"`
+		Notes             string    `json:"notes"`
+	}
+
+	var annotations []models.RevisionAnnotation
+	if err := koneksi.DB.Where("log_id = ? AND file_type = 'docx'", log.ID).Order("created_at asc").Find(&annotations).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	drafts := make([]DraftItem, 0, len(annotations))
+	for i, ann := range annotations {
+		drafts = append(drafts, DraftItem{
+			ID:                ann.ID,
+			ConsultationLogID: ann.ConsultationLogID,
+			Version:           i + 1,
+			Filename:          ann.Filename,
+			CreatedAt:         ann.CreatedAt,
+			Notes:             "Revised draft version",
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": drafts})
+}
+
+// UploadFinalDraftV2 allows a student to upload their final/revised docx file which gets stored as a docx revision annotation
+func UploadFinalDraftV2(c *gin.Context) {
+	user := middleware.CurrentUser(c)
+	logIDStr := c.Param("id")
+	logID, err := strconv.ParseUint(logIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid consultation log ID"})
+		return
+	}
+
+	log, err := accessibleLog(user, logID)
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Docx file is required"})
+		return
+	}
+
+	if file.Size > maxPaperUploadSize {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File exceeds maximum size limits (20 MB)"})
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	if ext != ".docx" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only .docx files are accepted as final drafts"})
+		return
+	}
+
+	timestamp := time.Now().UnixNano()
+	filename := fmt.Sprintf("%d_final_%s", timestamp, sanitizeFilename(file.Filename))
+	savePath := filepath.Join("storage", "annotations", filename)
+
+	if err := c.SaveUploadedFile(file, savePath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file on server"})
+		return
+	}
+
+	// Read docx text (optional, for search/indexing/OCR compatibility)
+	extractedText, _ := utils.ExtractDocxTrackChanges(savePath)
+
+	record := models.RevisionAnnotation{
+		ConsultationLogID: log.ID,
+		Filename:          filename,
+		FileType:          models.AnnotationDocx,
+		ExtractedText:     extractedText,
+	}
+
+	if err := koneksi.DB.Create(&record).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save draft record: " + err.Error()})
+		return
+	}
+
+	// Broadcast update event
+	if WebSocketHub != nil {
+		WebSocketHub.Broadcast("consultation."+strconv.FormatUint(log.ID, 10), "feedback.new", gin.H{
+			"log_id": log.ID,
+		})
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "Final document uploaded successfully", "data": record})
 }

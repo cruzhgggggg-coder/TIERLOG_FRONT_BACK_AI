@@ -1,0 +1,14 @@
+.git
+.gitignore
+.idea
+.vscode
+node_modules
+vendor
+storage/audio/*
+storage/transcript/*
+storage/paper/*
+storage/annotations/*
+storage/final/*
+*.exe
+*.stackdump
+tierlog_web

@@ -40,7 +40,17 @@ export type FeedbackItem = {
   consultation_log_id: number;
   content: string;
   category: 'Major' | 'Minor';
-  status: 'Pending' | 'Fixed' | 'Validated';
+  status: 'Pending' | 'Fixed' | 'Validated' | 'Rejected';
+  comments?: FeedbackComment[];
+};
+
+export type FeedbackComment = {
+  id: number;
+  feedback_item_id: number;
+  sender_id: number;
+  sender_role: 'student' | 'lecturer';
+  content: string;
+  created_at: string;
 };
 
 export type RevisionAnnotation = {

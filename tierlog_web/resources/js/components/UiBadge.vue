@@ -15,9 +15,11 @@ const presetClass = computed(() => {
       return 'bg-emerald-500/10 text-emerald-400';
     if (lower.includes('pending') || lower.includes('revision') || lower.includes('not set'))
       return 'bg-amber-500/10 text-amber-400';
-    if (lower.includes('major'))
+    if (lower.includes('rejected'))
       return 'bg-red-500/10 text-red-400';
-    if (lower.includes('minor'))
+    if (lower.includes('major') || lower.includes('hoc'))
+      return 'bg-red-500/10 text-red-400';
+    if (lower.includes('minor') || lower.includes('loc'))
       return 'bg-stone-400/10 text-stone-400';
     return 'bg-stone-400/10 text-stone-400';
   }

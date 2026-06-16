@@ -228,7 +228,7 @@ onMounted(() => {
                             <p class="text-sm text-stone-300">{{ item.content }}</p>
                           </div>
                           <div class="flex shrink-0 flex-col gap-1">
-                            <UiBadge :text="item.category" :color="item.category === 'Major' ? '#ef4444' : '#71717a'" />
+                            <UiBadge :text="item.category === 'Major' ? 'HOC' : 'LOC'" />
                             <UiBadge :text="item.status" />
                           </div>
                         </div>

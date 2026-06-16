@@ -39,6 +39,7 @@ func ConnectDatabase() {
 		&models.Student{},
 		&models.ConsultationLog{},
 		&models.FeedbackItem{},
+		&models.FeedbackComment{},
 		&models.RevisionAnnotation{},
 		&models.RedeemCode{},
 		&models.RefreshToken{},
@@ -59,7 +60,7 @@ func ConnectDatabase() {
 		_ = migrator.DropColumn(&models.FeedbackItem{}, "consultation_log_id")
 	}
 
-	_ = database.Exec("ALTER TABLE feedback_items MODIFY COLUMN status ENUM('Fixed', 'Pending', 'Validated') NOT NULL DEFAULT 'Pending'").Error
+	_ = database.Exec("ALTER TABLE feedback_items MODIFY COLUMN status ENUM('Fixed', 'Pending', 'Validated', 'Rejected') NOT NULL DEFAULT 'Pending'").Error
 
 	indexes := []struct {
 		table string
@@ -77,6 +78,8 @@ func ConnectDatabase() {
 		{"ai_chat_messages", "log_id,created_at", "idx_aichat_log_created"},
 		{"refresh_tokens", "user_id", "idx_refresh_user_id"},
 		{"refresh_tokens", "expires_at", "idx_refresh_expires"},
+		{"feedback_comments", "feedback_item_id", "idx_fcomment_item_id"},
+		{"feedback_comments", "feedback_item_id,created_at", "idx_fcomment_item_created"},
 	}
 
 	for _, idx := range indexes {

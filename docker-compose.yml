@@ -1,0 +1,72 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: tierlog-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: struct_go
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tierlog-network
+
+  go-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tierlog-go-api
+    restart: always
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_DATABASE=struct_go
+      - DB_USERNAME=root
+      - DB_PASSWORD=root
+      - ALLOWED_ORIGINS=http://localhost:8001,http://127.0.0.1:8001,http://localhost:8000,http://127.0.0.1:8000,http://localhost:5173
+    volumes:
+      - go_storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - tierlog-network
+
+  laravel-web:
+    build:
+      context: ./tierlog_web
+      dockerfile: Dockerfile
+    container_name: tierlog-laravel-web
+    restart: always
+    ports:
+      - "8001:80"
+    environment:
+      - APP_ENV=local
+      - APP_KEY=base64:OxGiBpwgdhrvx24corxmyc46BhCusDZpaCU6qk68BSY=
+      - APP_DEBUG=true
+      - APP_URL=http://localhost:8001
+      - DB_CONNECTION=sqlite
+      - VITE_API_URL=http://localhost:8080
+    depends_on:
+      - go-api
+    networks:
+      - tierlog-network
+
+volumes:
+  db_data:
+  go_storage:
+
+networks:
+  tierlog-network:
+    driver: bridge

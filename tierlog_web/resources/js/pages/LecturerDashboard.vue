@@ -11,6 +11,7 @@ import UiStatCard from '@/components/UiStatCard.vue';
 import UiBadge from '@/components/UiBadge.vue';
 import UiButton from '@/components/UiButton.vue';
 import { AlertIcon, ConsultationIcon, ProfileIcon, CheckCircleIcon, ClockIcon } from '@/components/icons';
+import RejectionDialog from '@/components/RejectionDialog.vue';
 
 interface DirectMessage {
   id: number;
@@ -38,6 +39,8 @@ const feedbackText = ref('');
 const chatInput = ref('');
 const chatLoading = ref(false);
 const validatingId = ref<number | null>(null);
+const rejectionDialogOpen = ref(false);
+const rejectionFeedbackId = ref<number | null>(null);
 const toasts = ref<Toast[]>([]);
 const stats = ref<DashboardStats | null>(null);
 const sessionFilter = ref<number | null>(null); // null = "All Sessions"
@@ -90,15 +93,17 @@ function getStudentStats(studentId: number) {
   const studentLogs = consultations.value.filter((l) => l.student_id === studentId);
   let pending = 0,
     fixed = 0,
-    validated = 0;
+    validated = 0,
+    rejected = 0;
   studentLogs.forEach((log) => {
     (log.feedback_items ?? []).forEach((f) => {
       if (f.status === 'Pending') pending++;
       else if (f.status === 'Fixed') fixed++;
       else if (f.status === 'Validated') validated++;
+      else if (f.status === 'Rejected') rejected++;
     });
   });
-  return { sessions: studentLogs.length, pending, fixed, validated };
+  return { sessions: studentLogs.length, pending, fixed, validated, rejected };
 }
 
 function studentStatusColor(studentId: number): string {
@@ -183,7 +188,39 @@ async function handleValidate(feedbackId: number) {
   validatingId.value = null;
 }
 
-async function handleRejectFix(feedbackId: number) {
+function openRejectionDialog(feedbackId: number) {
+  rejectionFeedbackId.value = feedbackId;
+  rejectionDialogOpen.value = true;
+}
+
+async function handleRejectConfirm(comment: string) {
+  if (rejectionFeedbackId.value === null) return;
+  const feedbackId = rejectionFeedbackId.value;
+  rejectionDialogOpen.value = false;
+  
+  validatingId.value = feedbackId;
+  const parentLog = consultations.value.find((l) =>
+    (l.feedback_items ?? []).some((f) => f.id === feedbackId),
+  );
+  const res = await auth.api(`/consultations/feedback/${feedbackId}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ 
+      status: 'Rejected', 
+      log_id: parentLog?.id ?? 0,
+      comment: comment
+    }),
+  });
+  if (res.ok) {
+    await fetchAllData();
+    addToast('Feedback rejected', 'warning');
+  } else {
+    addToast(res.error || 'Failed to reject', 'error');
+  }
+  validatingId.value = null;
+  rejectionFeedbackId.value = null;
+}
+
+async function handleUndo(feedbackId: number) {
   validatingId.value = feedbackId;
   const parentLog = consultations.value.find((l) =>
     (l.feedback_items ?? []).some((f) => f.id === feedbackId),
@@ -194,9 +231,9 @@ async function handleRejectFix(feedbackId: number) {
   });
   if (res.ok) {
     await fetchAllData();
-    addToast('Feedback returned to pending', 'warning');
+    addToast('Feedback returned to pending', 'info');
   } else {
-    addToast(res.error || 'Failed to reject', 'error');
+    addToast(res.error || 'Failed to undo', 'error');
   }
   validatingId.value = null;
 }
@@ -547,12 +584,55 @@ onUnmounted(() => {
                           :key="log.id"
                         >
                           <div class="flex items-center justify-between">
-                            <p class="text-sm font-medium text-stone-200">{{ log.paper_filename }}</p>
+                            <div class="flex items-center gap-2">
+                              <p class="text-sm font-medium text-stone-200">{{ log.paper_filename }}</p>
+                              <a
+                                :href="`${API_URL}/storage/paper/${log.paper_filename}`"
+                                target="_blank"
+                                download
+                                class="inline-flex h-6 w-6 items-center justify-center rounded bg-[#1c1c1e] text-stone-400 hover:bg-[#2c2c2e] hover:text-stone-200 transition-colors"
+                                title="Download Initial Draft"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                  <polyline points="7 10 12 15 17 10" />
+                                  <line x1="12" y1="15" x2="12" y2="3" />
+                                </svg>
+                              </a>
+                            </div>
                             <p class="text-[11px] text-stone-600">{{ formatDate(log.created_at) }}</p>
                           </div>
-                          <p class="mt-2 rounded-lg bg-[#0a0a0b] p-3 text-xs leading-relaxed text-stone-500">
+                          <p class="mt-2 rounded-lg bg-[#0a0a0b] p-3 text-xs leading-relaxed text-stone-500 font-mono">
                             {{ truncate(log.transcript_text, 300) }}
                           </p>
+                          
+                          <!-- Drafts / Final Drafts section in overview -->
+                          <div v-if="log.revision_annotations && log.revision_annotations.length > 0" class="mt-3 space-y-2">
+                            <p class="text-[10px] font-semibold uppercase tracking-wider text-stone-600">Drafts / Final Documents</p>
+                            <div class="grid grid-cols-1 gap-1.5">
+                              <div
+                                v-for="ann in log.revision_annotations"
+                                :key="ann.id"
+                                class="flex items-center justify-between rounded-lg bg-[#0a0a0b] p-2 text-xs border border-white/[0.02]"
+                              >
+                                <span class="text-stone-300 truncate max-w-[200px]">{{ ann.filename }}</span>
+                                <a
+                                  :href="`${API_URL}/storage/annotations/${ann.filename}`"
+                                  target="_blank"
+                                  download
+                                  class="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 transition-colors"
+                                  title="Download Draft"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                    <polyline points="7 10 12 15 17 10" />
+                                    <line x1="12" y1="15" x2="12" y2="3" />
+                                  </svg>
+                                  Download
+                                </a>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -616,8 +696,8 @@ onUnmounted(() => {
                           <p class="flex-1 text-sm leading-relaxed text-stone-300">{{ item.content }}</p>
                           <div class="flex shrink-0 items-center gap-1.5">
                             <UiBadge
-                              :text="item.category"
-                              :color="item.category === 'Major' ? 'bg-red-500/15 text-red-400 ring-red-500/30' : 'bg-amber-500/15 text-amber-400 ring-amber-500/30'"
+                              :text="item.category === 'Major' ? 'HOC' : 'LOC'"
+                              :color="item.category === 'Major' ? 'bg-red-500/15 text-red-400 ring-red-500/30' : 'bg-stone-400/15 text-stone-400 ring-stone-500/30'"
                             />
                             <UiBadge
                               :text="item.status"
@@ -626,7 +706,9 @@ onUnmounted(() => {
                                   ? 'bg-emerald-500/15 text-emerald-400 ring-emerald-500/30'
                                   : item.status === 'Fixed'
                                     ? 'bg-zinc-400/15 text-stone-500 ring-zinc-500/30'
-                                    : 'bg-amber-500/15 text-amber-400 ring-amber-500/30'
+                                    : item.status === 'Rejected'
+                                      ? 'bg-red-500/15 text-red-400 ring-red-500/30'
+                                      : 'bg-amber-500/15 text-amber-400 ring-amber-500/30'
                               "
                             />
                           </div>
@@ -645,7 +727,7 @@ onUnmounted(() => {
                             v-if="item.status === 'Fixed'"
                             class="inline-flex items-center gap-1.5 rounded-md bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/15"
                             :disabled="validatingId === item.id"
-                            @click="handleRejectFix(item.id)"
+                            @click="openRejectionDialog(item.id)"
                           >
                             <AlertIcon :size="13" />
                             Reject
@@ -654,7 +736,7 @@ onUnmounted(() => {
                             v-if="item.status === 'Validated'"
                             class="inline-flex items-center gap-1.5 rounded-md bg-[#1c1c1e] px-3 py-1.5 text-xs font-medium text-stone-500 transition-colors hover:bg-[#2c2c2e]"
                             :disabled="validatingId === item.id"
-                            @click="handleRejectFix(item.id)"
+                            @click="handleUndo(item.id)"
                           >
                             Undo
                           </button>
@@ -679,7 +761,22 @@ onUnmounted(() => {
                               <ConsultationIcon :size="16" color="#f59e0b" />
                             </div>
                             <div>
-                              <p class="text-sm font-medium text-stone-200">{{ log.paper_filename }}</p>
+                              <div class="flex items-center gap-2">
+                                <p class="text-sm font-medium text-stone-200">{{ log.paper_filename }}</p>
+                                <a
+                                  :href="`${API_URL}/storage/paper/${log.paper_filename}`"
+                                  target="_blank"
+                                  download
+                                  class="inline-flex h-5 w-5 items-center justify-center rounded bg-[#1c1c1e] text-stone-400 hover:bg-[#2c2c2e] hover:text-stone-200 transition-colors"
+                                  title="Download Initial Draft"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                    <polyline points="7 10 12 15 17 10" />
+                                    <line x1="12" y1="15" x2="12" y2="3" />
+                                  </svg>
+                                </a>
+                              </div>
                               <p class="text-[11px] text-stone-600">{{ formatDate(log.created_at) }}</p>
                             </div>
                           </div>
@@ -688,7 +785,7 @@ onUnmounted(() => {
                             color="bg-[#1c1c1e] text-stone-500"
                           />
                         </div>
-                        <p class="mt-3 rounded-lg bg-[#0a0a0b] p-3 text-xs leading-relaxed text-stone-500">
+                        <p class="mt-3 rounded-lg bg-[#0a0a0b] p-3 text-xs leading-relaxed text-stone-500 font-mono">
                           {{ truncate(log.transcript_text, 200) }}
                         </p>
                         <div class="mt-3 flex flex-wrap gap-1.5">
@@ -704,13 +801,22 @@ onUnmounted(() => {
                           >
                             Transcript
                           </span>
-                          <span
+                          <a
                             v-for="ann in log.revision_annotations ?? []"
                             :key="ann.id"
-                            class="inline-flex items-center rounded-md bg-[#1c1c1e] px-2.5 py-1 text-[11px] font-medium text-stone-500"
+                            :href="`${API_URL}/storage/annotations/${ann.filename}`"
+                            target="_blank"
+                            download
+                            class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-400 hover:bg-amber-500/20 transition-colors"
+                            title="Download Final Draft/Revision"
                           >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                              <polyline points="7 10 12 15 17 10" />
+                              <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
                             {{ ann.filename }}
-                          </span>
+                          </a>
                         </div>
                       </div>
                       <div v-if="!selectedStudentLogs.length" class="py-8 text-center">
@@ -797,8 +903,8 @@ onUnmounted(() => {
                 <div class="mt-3 flex items-center justify-between">
                   <div class="flex items-center gap-1.5">
                     <UiBadge
-                      :text="item.category"
-                      :color="item.category === 'Major' ? 'bg-red-500/15 text-red-400 ring-red-500/30' : 'bg-amber-500/15 text-amber-400 ring-amber-500/30'"
+                      :text="item.category === 'Major' ? 'HOC' : 'LOC'"
+                      :color="item.category === 'Major' ? 'bg-red-500/15 text-red-400 ring-red-500/30' : 'bg-stone-400/15 text-stone-400 ring-stone-500/30'"
                     />
                     <UiBadge text="Fixed" color="bg-zinc-400/15 text-stone-500 ring-zinc-500/30" />
                   </div>
@@ -814,7 +920,7 @@ onUnmounted(() => {
                     <button
                       class="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2.5 py-1.5 text-[11px] font-medium text-red-400 transition-colors hover:bg-red-500/15"
                       :disabled="validatingId === item.id"
-                      @click="handleRejectFix(item.id)"
+                      @click="openRejectionDialog(item.id)"
                     >
                       <AlertIcon :size="12" />
                       Reject
@@ -867,6 +973,15 @@ onUnmounted(() => {
           </div>
         </TransitionGroup>
       </div>
+      <RejectionDialog
+        :open="rejectionDialogOpen"
+        title="Reject Revision"
+        message="Are you sure you want to reject this revision? Please provide an explanation for the student."
+        confirm-label="Reject Revision"
+        cancel-label="Cancel"
+        @confirm="handleRejectConfirm"
+        @cancel="rejectionDialogOpen = false"
+      />
     </UiPage>
   </RequireAuth>
 </template>
