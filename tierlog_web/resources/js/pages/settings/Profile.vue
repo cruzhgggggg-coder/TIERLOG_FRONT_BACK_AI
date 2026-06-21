@@ -24,6 +24,7 @@ const lecturerId = ref('');
 const nip = ref('');
 const faculty = ref('');
 const expertise = ref('');
+const aiConstraints = ref('');
 
 const isStudent = computed(() => auth.user?.role === 'student');
 const isLecturer = computed(() => auth.user?.role === 'lecturer');
@@ -43,6 +44,7 @@ function populateFromUser() {
     nip.value = u.lecturer.nip ?? '';
     faculty.value = u.lecturer.faculty ?? '';
     expertise.value = u.lecturer.keahlian ?? '';
+    aiConstraints.value = u.lecturer.ai_constraints ?? '';
   }
 }
 
@@ -75,6 +77,7 @@ async function saveProfile() {
     body.nip = nip.value;
     body.faculty = faculty.value;
     body.keahlian = expertise.value;
+    body.ai_constraints = aiConstraints.value;
   }
 
   const res = await auth.api<{ user: typeof auth.user }>('/settings/profile', {
@@ -140,6 +143,7 @@ async function saveProfile() {
                   <UiField v-model="nip" label="NIP" placeholder="Staff ID number" />
                   <UiField v-model="faculty" label="Faculty" placeholder="Faculty name" />
                   <UiField v-model="expertise" label="Expertise" placeholder="Area of expertise" />
+                  <UiField v-model="aiConstraints" label="AI Guidelines & Constraints" type="textarea" placeholder="Modify system prompt / instructions for AI classification (e.g. 'Must focus on structural logic rather than grammar')" class="sm:col-span-2" />
                 </div>
               </div>
             </template>

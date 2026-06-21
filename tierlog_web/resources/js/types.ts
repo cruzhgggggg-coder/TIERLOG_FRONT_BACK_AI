@@ -17,6 +17,7 @@ export type LecturerProfile = {
   name: string;
   faculty: string;
   keahlian: string;
+  ai_constraints?: string;
 };
 
 export type User = {

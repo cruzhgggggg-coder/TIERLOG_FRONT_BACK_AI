@@ -79,14 +79,15 @@ type RedeemCode struct {
 }
 
 type Lecturer struct {
-	ID        uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	UserID    uint64    `gorm:"not null" json:"user_id"`
-	NIP       string    `gorm:"column:nip;unique;not null;type:varchar(20)" json:"nip"`
-	Name      string    `gorm:"not null;type:varchar(100)" json:"name"`
-	Keahlian  string    `gorm:"type:varchar(100)" json:"keahlian"`
-	Faculty   string    `gorm:"type:varchar(100)" json:"faculty"`
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	ID            uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID        uint64    `gorm:"not null" json:"user_id"`
+	NIP           string    `gorm:"column:nip;unique;not null;type:varchar(20)" json:"nip"`
+	Name          string    `gorm:"not null;type:varchar(100)" json:"name"`
+	Keahlian      string    `gorm:"type:varchar(100)" json:"keahlian"`
+	Faculty       string    `gorm:"type:varchar(100)" json:"faculty"`
+	AIConstraints string    `gorm:"column:ai_constraints;type:text" json:"ai_constraints"`
+	CreatedAt     time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt     time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 
 	User User `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"user,omitempty"`
 }

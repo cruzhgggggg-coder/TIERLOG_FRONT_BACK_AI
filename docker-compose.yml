@@ -47,6 +47,8 @@ services:
     build:
       context: ./tierlog_web
       dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:8080
     container_name: tierlog-laravel-web
     restart: always
     ports:

@@ -25,6 +25,7 @@ const studentLinks: NavItem[] = [
 
 const lecturerLinks: NavItem[] = [
   { label: 'Students', href: '/lecturer-dashboard' },
+  { label: 'Workspace', href: '/workspace' },
   { label: 'Archive', href: '/archive' },
   { label: 'Settings', href: '/settings/profile' },
 ];

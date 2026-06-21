@@ -283,15 +283,16 @@ func UpdateProfile(c *gin.Context) {
 	user := middleware.CurrentUser(c)
 
 	var req struct {
-		Name        string `json:"name" binding:"required"`
-		Email       string `json:"email" binding:"required,email"`
-		NIM         string `json:"nim"`
-		Prodi       string `json:"prodi"`
-		ThesisTitle string `json:"thesis_title"`
-		LecturerID  uint64 `json:"lecturer_id"`
-		NIP         string `json:"nip"`
-		Faculty     string `json:"faculty"`
-		Keahlian    string `json:"keahlian"`
+		Name          string `json:"name" binding:"required"`
+		Email         string `json:"email" binding:"required,email"`
+		NIM           string `json:"nim"`
+		Prodi         string `json:"prodi"`
+		ThesisTitle   string `json:"thesis_title"`
+		LecturerID    uint64 `json:"lecturer_id"`
+		NIP           string `json:"nip"`
+		Faculty       string `json:"faculty"`
+		Keahlian      string `json:"keahlian"`
+		AIConstraints string `json:"ai_constraints"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -338,6 +339,7 @@ func UpdateProfile(c *gin.Context) {
 		}
 		lecturer.Faculty = req.Faculty
 		lecturer.Keahlian = req.Keahlian
+		lecturer.AIConstraints = req.AIConstraints
 		if err := koneksi.DB.Save(&lecturer).Error; err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
