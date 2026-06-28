@@ -1,586 +1,331 @@
 # 🛡️ TierLog — Enterprise Intelligent Thesis Supervision Platform
 
-[![Tech Stack](https://img.shields.io/badge/Stack-Go%20%7C%20Laravel%20%7C%20Vue%203%20%7C%20Inertia-blue?style=for-the-badge)](https://github.com/cruzhgggggg-coder/TIERLOG_FRONT_BACK_AI.git)
-[![Version](https://img.shields.io/badge/Release-V1.4%20(UI)-amber?style=for-the-badge)](https://github.com/cruzhgggggg-coder/TIERLOG_FRONT_BACK_AI.git)
-[![Docker](https://img.shields.io/badge/Docker-Enabled-green?style=for-the-badge)](https://github.com/cruzhgggggg-coder/TIERLOG_FRONT_BACK_AI.git)
+[![Tech Stack](https://img.shields.io/badge/Stack-Go%20%7C%20Laravel%20%7C%20Vue%203%20%7C%20Inertia-blue?style=for-the-badge)](https://github.com/)
+[![Backend](https://img.shields.io/badge/Backend-Go%201.22%2B%20(Gin)-00ADD8?style=for-the-badge&logo=go)](https://golang.org/)
+[![Frontend](https://img.shields.io/badge/Frontend-Laravel%2011%20%7C%20Vue%203-FF2D20?style=for-the-badge&logo=laravel)](https://laravel.com/)
+[![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?style=for-the-badge&logo=docker)](https://www.docker.com/)
+[![License](https://img.shields.io/badge/License-Enterprise%20Proprietary-darkgreen?style=for-the-badge)](https://github.com/)
 
-TierLog is a high-performance, real-time thesis supervision (bimbingan) and revision tracker. By combining a split-service architecture—a highly concurrent **Go (Gin Gonic) Backend** and a reactive **Laravel + Inertia.js (Vue 3, Pinia, TypeScript, Tailwind CSS v4) Frontend**—TierLog delivers a desktop-like workflow with low latency, robust data protection, and a highly customizable workspace.
+**TierLog** is an enterprise-grade, high-performance, real-time thesis supervision (*bimbingan tugas akhir*) and revision tracking platform. Designed for modern academic institutions, TierLog combines a highly concurrent micro-service architecture powered by a **Go (Gin Gonic) API Gateway** with a reactive, desktop-class **Laravel 11 + Inertia.js (Vue 3, TypeScript, Tailwind CSS v4) Frontend**.
+
+By integrating advanced multimodal AI engines—including Groq Whisper speech-to-text, NVIDIA NIM, OpenAI, Anthropic, and Gemini Vision—TierLog automates consultation transcribing, handwritten notes recognition (OCR), track-changes parsing, and intelligent revision classification while enforcing strict academic guardrails against AI hallucinations.
 
 ---
 
 ## 📋 Table of Contents
-- [1. Technical Architecture & Design Patterns](#1-technical-architecture--design-patterns)
-- [2. Enterprise Security & Guardrails](#2-enterprise-security--guardrails)
-- [3. Project Directory structure](#3-project-directory-structure)
-- [4. Complete Database Schema (MySQL & SQLite)](#4-complete-database-schema-mysql--sqlite)
-- [5. API & WebSocket Specifications (Contract Docs)](#5-api--websocket-specifications-contract-docs)
-- [6. Frontend Floating Window Workspace Engine](#6-frontend-floating-window-workspace-engine)
-- [7. Installation & Deployment Guide](#7-installation--deployment-guide)
-- [8. Production Deployment & Scaling Guidelines](#8-production-deployment--scaling-guidelines)
+
+- [1. Enterprise System Architecture](#1-enterprise-system-architecture)
+- [2. Key Features & Technological Innovations](#2-key-features--technological-innovations)
+  - [2.1 AI Dosen Persona Guardrails (Anti-Hallucination Engine)](#21-ai-dosen-persona-guardrails-anti-hallucination-engine)
+  - [2.2 Groq Whisper Audio Slicing Engine (STT)](#22-groq-whisper-audio-slicing-engine-stt)
+  - [2.3 Multimodal Vision OCR & Track Changes Parsing](#23-multimodal-vision-ocr--track-changes-parsing)
+  - [2.4 Resilient State-Machine JSON Sanitizer](#24-resilient-state-machine-json-sanitizer)
+  - [2.5 Provider-Agnostic LLM Gateway & Dual Key Architecture](#25-provider-agnostic-llm-gateway--dual-key-architecture)
+  - [2.6 Realtime WebSocket Hub & Event Broadcasting](#26-realtime-websocket-hub--event-broadcasting)
+  - [2.7 Widescreen Desktop Workspace Engine (1600px)](#27-widescreen-desktop-workspace-engine-1600px)
+- [3. Project Directory Structure](#3-project-directory-structure)
+- [4. Database Architecture & Data Models](#4-database-architecture--data-models)
+- [5. API & WebSocket Contract Specifications](#5-api--websocket-contract-specifications)
+- [6. Installation & Environment Configuration](#6-installation--environment-configuration)
+- [7. Production Deployment & Containerization](#7-production-deployment--containerization)
+- [8. Enterprise Security & Reliability Standard](#8-enterprise-security--reliability-standard)
 
 ---
 
-## 1. Technical Architecture & Design Patterns
+## 1. Enterprise System Architecture
 
-TierLog utilizes a dual-engine structure optimized for speed, reliability, and ease of deployment:
+TierLog utilizes a decoupled dual-engine architecture optimized for low latency, sub-second WebSocket broadcasting, high concurrency, and secure data handling.
 
 ```mermaid
 flowchart TB
-    subgraph Client [Client Browser - Single Page Application]
+    subgraph Client [Client Tier — Single Page Application]
         direction TB
-        UI[Vue 3 Components] <--> Pinia[Pinia State Stores]
-        UI <--> Pointer[Pointer Capture / Draggable API]
+        UI[Vue 3 Components & Floating Windows] <--> Stores[Pinia State Stores & Inertia Router]
+        UI <--> Widescreen[Dynamic Workspace Engine - 1600px]
     end
 
-    subgraph WebServer [Laravel Web Server: Port 8000 / 8001]
+    subgraph WebServer [Frontend Web Service — Laravel 11: Port 8000]
         direction TB
-        AuthProxy[Session Routing]
+        AuthProxy[Session Routing & SSR Proxy]
         Inertia[Inertia.js Server Renderer]
-        SQLite[(Local SQLite DB)]
+        SQLite[(Local SQLite App Cache)]
         
         AuthProxy --> Inertia
         Inertia --> SQLite
     end
 
-    subgraph APIServer [Go Backend API Service: Port 8080]
+    subgraph APIServer [Core API Backend Service — Go 1.22 (Gin): Port 8080]
         direction TB
-        Gin[Gin Router & Limiter]
-        GORM[GORM ORM Engine]
-        WS[WebSocket Room Hub]
-        AICtrl[AI Gateway Dispatcher]
+        Gin[Gin Router & Middleware Limiter]
+        GORM[GORM ORM Core Engine]
+        WSHub[Realtime WebSocket Room Hub]
+        AICtrl[AI Dispatcher & Provider Gateway]
+        Sanitizer[State-Machine JSON Sanitizer]
         
-        Gin --> GORM
-        Gin --> WS
         Gin --> AICtrl
+        Gin --> WSHub
+        AICtrl --> Sanitizer
+        Gin --> GORM
     end
 
-    subgraph Database [Storage & Persistence Layer]
-        MySQL[(MySQL Database)]
-        Disk[(Persistent Storage Volumes)]
+    subgraph DataTier [Persistence & External AI Engines]
+        direction LR
+        MySQL[(MySQL Enterprise DB)]
+        Groq[Groq Whisper STT API]
+        NVIDIA[NVIDIA NIM / OpenAI API]
+        Gemini[Gemini Vision OCR API]
     end
 
-    subgraph ExternalGateways [Secure AI Providers]
-        Gemini[Google Gemini API]
-        Groq[Groq LPU API]
-        OpenAI[OpenAI API]
-    end
-
-    %% Communications
-    UI <-->|Inertia Hydration| Inertia
-    UI <-->|REST API JSON| Gin
-    UI <-->|Bidirectional WS| WS
-    GORM <-->|GORM Queries| MySQL
-    AICtrl <-->|Encrypted Key Routing| ExternalGateways
-    Gin -->|Write Audio/Docs| Disk
+    Client <-->|HTTP / Websocket WS| APIServer
+    Client <-->|Web Routes| WebServer
+    GORM <--> DataTier
+    AICtrl <-->|REST multipart/json| Groq
+    AICtrl <-->|Chat Completions| NVIDIA
+    AICtrl <-->|Multimodal Input| Gemini
 ```
-
-### Key Architectural Patterns
-*   **The Backend (Go)**: Built with Gin Gonic, focusing on raw HTTP throughput, real-time WebSocket room piping, and thread-safe operations. GORM is utilized for connection pooling and schema migrations.
-*   **The Frontend (Laravel + Inertia.js + Vue 3)**: Laravel acts as the initial page renderer and state-dehydrator. Inertia.js eliminates the latency of fetching page files dynamically, combining the security and routing properties of Laravel with the single-page application (SPA) reactive runtime of Vue 3.
-*   **Decoupled State Management**:
-    - **Authentication**: Managed via the Pinia `auth` store with local storage synchronization and automatic JWT expiry checks.
-    - **Workspace State**: Coordinates, maximization, focus depth (z-index), and visibility configurations are managed dynamically within `workspace` Pinia store.
 
 ---
 
-## 2. Enterprise Security & Guardrails
+## 2. Key Features & Technological Innovations
 
-TierLog enforces strict security compliance at all levels of the application:
+### 2.1 AI Dosen Persona Guardrails (Anti-Hallucination Engine)
+The system injects specialized academic prompts (`personaDosenPrompt`) into LLM inference pipelines to ensure that AI recommendations remain 100% truthful to the supervisor's actual feedback:
+- **Zero New Ideas Policy**: AI is strictly prohibited from inventing new research topics, methodologies, or corrections not explicitly uttered by the lecturer in guidance recordings or annotated documents.
+- **Academic Classification Structure**: Revision items are automatically categorized into two standard academic domains:
+  - **HOC (Higher Order Concerns / Major)**: Structural research issues (e.g., hypothesis validity, research model alignment, methodologies, data analysis).
+  - **LOC (Lower Order Concerns / Minor)**: Technical writing mechanics (e.g., typographical errors, citation formatting APA/IEEE, grammatical structure, layout margins).
 
-### 2.1 Encryption-At-Rest (AI Gateways)
-To allow students and lecturers to use their own AI resources without exposing them, individual API keys (OpenAI, Gemini, Groq, Anthropic, Nvidia) are saved in the database under the `users` table. 
-- **Encryption**: Keys are encrypted using **AES-256-GCM** row-level encryption. The decryption key is loaded strictly in the Go backend container RAM via environment variables.
-- **Graceful Failures**: If no keys are provided, features degrading to AI support are blocked gracefully and dashboard widgets display warnings without causing server or client-side runtime errors.
+### 2.2 Groq Whisper Audio Slicing Engine (STT)
+When students upload audio recordings of guidance sessions (`.mp3`, `.wav`):
+- **Dynamic File Chunking**: If the uploaded audio exceeds **20 MB** (below Groq's 25MB safety threshold), the backend (`ai_controller.go` -> `transcribeAudio`) automatically splits the binary file into ordered byte slices, transmits them concurrently to Groq Whisper (`whisper-large-v3`), and seamlessly stitches the transcripts together.
+- **Graceful Fallback**: If `GROQ_API_KEY` is not set in environment variables, the system prevents application crashes and bypasses transcription with an informative log while keeping document inspection features operational.
 
-### 2.2 AI Prompt Guardrails & Constraints
-AI features (such as feedback classification and bimbingan help) operate under strict prompt boundaries:
-1.  **Strict Contextual Bounding**: The AI assistant *cannot* invent advice. It strictly operates within the context of the official lecturer's feedback database logs.
-2.  **Lecturer Constraints Injection**: Lecturers can save a custom system prompt guideline (`ai_constraints`). These guidelines are fetched and dynamically appended to the AI system prompt before dispatching queries to external LLMs, ensuring the AI aligns with the lecturer's teaching methodology.
+### 2.3 Multimodal Vision OCR & Track Changes Parsing
+- **Gemini Vision OCR (`gemini-2.0-flash`)**: Extracts handwritten notes, red-pen annotations, and marginal remarks from uploaded photos of physical papers.
+- **DOCX Revision Parsing**: Native parsing of Word `.docx` track changes to convert inline editor edits directly into actionable student tasks.
 
-### 2.3 Rate Limiting
-To prevent brute-force attacks and abuse, the Go backend incorporates a Token Bucket rate-limiter middleware:
-- **General Rate Limit**: Capped at 100 requests per minute per IP.
-- **Sensitive Operations**: Registration (5 requests/min), Login (10 requests/min), and Token Refresh (20 requests/min).
+### 2.4 Resilient State-Machine JSON Sanitizer
+LLMs frequently return JSON blocks containing unescaped raw newlines (`\n`, `\r`, `\t`) inside string literals, breaking default JSON parsers (`json.Unmarshal` throwing `invalid character '\n' in string literal`).
+TierLog implements a custom **state-machine JSON sanitizer** (`sanitizeJSON`) in Go that parses string tokens char-by-char, escaping raw control characters inside quotes while preserving valid structural formatting.
+
+### 2.5 Provider-Agnostic LLM Gateway & Dual Key Architecture
+TierLog supports dual-purpose API keys:
+1. **System-wide STT Key**: Global `GROQ_API_KEY` configured by server administrators for audio transcription.
+2. **Per-User Encrypted LLM Keys**: Stored in the database for each user (`nvidia_key`, `openai_key`, `gemini_key`), allowing individual preference for preferred inference providers.
+3. **Capability Filtering**: Intelligent endpoint capability discovery filtering models by multimodal capabilities (e.g., separating text-only LLMs from vision-capable models).
+
+### 2.6 Realtime WebSocket Hub & Event Broadcasting
+Built-in WebSocket hub (`ws://localhost:8080/ws`) enables live room broadcasting. Whenever a student uploads a revision or a lecturer updates consultation status, connected clients receive instant state updates without requiring page reloads.
+
+### 2.7 Widescreen Desktop Workspace Engine (1600px)
+To maximize productivity on modern widescreen monitors, the frontend features an expanded `1600px` (`size="xl"`) layout container on consultation pages, lecturer dashboards, and archives, supporting split-pane document reviewing.
 
 ---
 
 ## 3. Project Directory Structure
 
 ```
-PopularProgramingFinalProject/
-├── controller/                 # Go Controllers (REST Handlers)
-│   ├── ai_controller.go        # Handles AI Gateway queries, key validations, and prompts
-│   ├── app_controller.go       # Auth token refresh, profiles, and dashboard statistics
-│   ├── consultation_controller.go# Audio/docx uploads, feedback status, and direct messages
-│   └── user_controller.go      # Student/Lecturer account generation
-├── models/                     # Go Database Models
-│   └── models.go               # GORM model structs with JSON tags
-├── koneksi/                    # Database Setup
-│   └── koneksi.go              # Database connection pool settings and auto-migration
-├── middleware/                 # Go HTTP Middlewares
-│   └── middleware.go           # JWT Auth, CORS setup, Rate limiters, and Role checkers
-├── realtime/                   # WebSockets Engine
-│   └── websocket.go            # Room subscriber hub matching client channels
-├── storage/                    # Local Disk Assets (Ignored in Git, mounted in volumes)
-│   ├── audio/                  # .mp3 voice supervision recordings
-│   ├── paper/                  # .docx draft thesis papers
-│   ├── transcript/             # JSON-based transcript and audio timestamps
-│   ├── annotations/            # Extracted docx annotations and text dumps
-│   └── final/                  # Approved final drafts
-├── tierlog_web/                # Frontend Application (Laravel & Inertia)
-│   ├── app/                    # Laravel controllers & middlewares
-│   ├── config/                 # Config files (auth.php, app.php, database.php)
-│   ├── database/               # Database definitions (SQLite layout)
-│   ├── routes/
-│   │   └── web.php             # SPA web page Inertia routes
-│   ├── resources/js/           # Vue 3 SPA Files
-│   │   ├── components/         # Reusable UI widgets (WorkspaceWindow, UiField, UiBadge, etc.)
-│   │   ├── pages/              # Vue page templates (Workspace, Consultations, Login, etc.)
-│   │   ├── stores/             # Pinia state managers (auth.ts, workspace.ts)
-│   │   ├── types.ts            # Type declarations for API contracts
-│   │   └── app.ts              # Vite entrypoint loading Vue, Pinia, & Inertia
-│   ├── tailwind.config.js      # Tailwind CSS configuration
-│   ├── tsconfig.json           # TypeScript compilation config
-│   ├── vite.config.js          # Vite assets compiler
-│   └── Dockerfile              # Frontend multi-stage build container
-├── Dockerfile                  # Go API Dockerfile
-├── docker-compose.yml          # Container configuration orchestrator
-├── struct_go.sql               # Database layout structure
-└── README.md                   # System Documentation
+Tierlog_EXPO/
+├── PopularProgramingFinalProject/         # Main Project Package
+│   ├── main.go                            # Go Application Entry Point & Route Declarations
+│   ├── Dockerfile                         # Go Backend Container Build Spec
+│   ├── docker-compose.yml                 # Multi-container Orchestration (Go + Laravel + MySQL)
+│   ├── go.mod / go.sum                    # Go Dependency Manifests
+│   ├── struct_go.sql                      # Database Schema Initialization Dump
+│   │
+│   ├── controller/                        # Gin Request Controllers
+│   │   ├── ai_controller.go               # AI Inference Gateway, Whisper Chunking, JSON Sanitizer
+│   │   ├── app_controller.go              # Consultation CRUD & File Management
+│   │   ├── annotation_ctrl.go             # Annotation & Image Upload Handlers
+│   │   └── user_controller.go             # Authentication & API Key Management
+│   │
+│   ├── models/                            # GORM Database Struct Models
+│   │   ├── user.go                        # User Account & Encrypted Credentials
+│   │   ├── consultation.go                # Consultation Logs & Status Trackers
+│   │   └── annotation.go                  # Revision Annotations & Tasks
+│   │
+│   ├── middleware/                        # JWT & Security Middlewares
+│   ├── realtime/                          # WebSocket Hub & Room Broadcaster
+│   ├── utils/                             # Crypto & Encryption Helpers
+│   │
+│   └── tierlog_web/                       # Frontend Web Application (Laravel 11 + Inertia)
+│       ├── artisan                        # Laravel CLI Tool
+│       ├── package.json                   # Vite, Vue 3, Pinia, Tailwind Dependencies
+│       ├── Dockerfile                     # Frontend Web Container Build Spec
+│       ├── app/                           # Laravel Controllers & Middleware
+│       ├── config/                        # Framework Configurations
+│       ├── database/                      # SQLite / Migrations
+│       ├── resources/
+│       │   ├── js/                        # Vue 3 Components & TypeScript Modules
+│       │   │   ├── Pages/                 # Inertia Page Views (Consultations, Dashboard, Archive)
+│       │   │   ├── components/            # Reusable Workspace UI Components
+│       │   │   └── types/                 # TypeScript Interface Definitions
+│       │   └── css/                       # Tailwind CSS v4 Stylesheets
+│       └── routes/                        # Web & Auth Routes
 ```
 
 ---
 
-## 4. Complete Database Schema (MySQL & SQLite)
+## 4. Database Architecture & Data Models
 
-The platform relies on **MySQL** for data records, logs, real-time messaging, and key persistence. **SQLite** is configured on the frontend to manage Laravel session metadata.
+TierLog utilizes MySQL with GORM Object-Relational Mapping. Below is the relational core entity model:
 
-### MySQL Database Tables (`struct_go` DB)
+### Key Tables
 
-```
-  ┌──────────────┐          ┌──────────────┐          ┌──────────────┐
-  │    users     │1       1 │  lecturers   │1       * │   students   │
-  │  (Accounts)  ├──────────┤   (Profiles) ├──────────┤   (Profiles) │
-  └──────┬───────┘          └──────────────┘          └──────┬───────┘
-         │1                                                  │1
-         │                                                   │
-         │*                                                  │*
-  ┌──────┴───────┐                                    ┌──────┴───────┐
-  │refresh_tokens│                                    │consultation_ │
-  │  (Sessions)  │                                    │     logs     │
-  └──────────────┘                                    └──────┬───────┘
-                                                             │1
-                                              ┌──────────────┼──────────────┐
-                                             *│             *│             *│
-                                      ┌──────┴───────┐┌──────┴───────┐┌──────┴───────┐
-                                      │feedback_items││direct_msgs   ││ai_chat_msgs  │
-                                      │ (Revisions)  ││ (Room Chats) ││(AI Assistant)│
-                                      └──────┬───────┘└──────────────┘└──────────────┘
-                                             │1
-                                             │*
-                                      ┌──────┴───────┐
-                                      │feedback_     │
-                                      │comments      │
-                                      └──────────────┘
-```
+#### 1. `users`
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UINT | Primary Key, Auto Increment | Unique user identifier |
+| `name` | VARCHAR(255) | NOT NULL | Full name of student/lecturer |
+| `email` | VARCHAR(255) | Unique, NOT NULL | Account login email |
+| `password` | VARCHAR(255) | NOT NULL | Bcrypt hashed password |
+| `role` | VARCHAR(50) | NOT NULL | Account role (`student`, `lecturer`, `admin`) |
+| `preferred_model`| VARCHAR(100) | Default: `nvidia:llama-3.2` | Preferred LLM provider:model string |
+| `groq_key` | VARCHAR(255) | Encrypted | Per-user or override Groq API key |
+| `nvidia_key` | VARCHAR(255) | Encrypted | Per-user NVIDIA NIM API key |
 
-#### 4.1 Table: `users`
-Represents credentials and user-defined API keys:
-- `id` (`bigint unsigned`, PK, Auto Increment)
-- `name` (`varchar(255)`, Not Null)
-- `email` (`varchar(255)`, Unique, Index, Not Null)
-- `password` (`varchar(255)`, Not Null)
-- `role` (`enum('student','lecturer')`, Not Null)
-- `openai_key`, `gemini_key`, `anthropic_key`, `nvidia_key`, `groq_key` (`varchar(255)`, Nullable, Encrypted)
-- `preferred_model` (`varchar(100)`, Default: `'default'`)
-- `is_gateway_active` (`boolean`, Default: `false`)
-- `created_at`, `updated_at`, `deleted_at` (`datetime`)
+#### 2. `consultations`
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UINT | Primary Key, Auto Increment | Consultation session ID |
+| `student_id` | UINT | Foreign Key (`users.id`) | Student submission owner |
+| `lecturer_id` | UINT | Foreign Key (`users.id`) | Assigned supervisor |
+| `title` | VARCHAR(255) | NOT NULL | Thesis chapter or submission title |
+| `status` | VARCHAR(50) | Default: `pending` | Session state (`pending`, `reviewed`, `completed`) |
+| `audio_path` | VARCHAR(500) | Optional | Storage path to uploaded guidance audio |
+| `paper_path` | VARCHAR(500) | NOT NULL | Storage path to thesis manuscript (.docx) |
+| `transcript` | LONGTEXT | Optional | Stitched output from Groq Whisper STT |
 
-#### 4.2 Table: `lecturers`
-Profile schema for the supervisor:
-- `id` (`bigint unsigned`, PK, Auto Increment)
-- `user_id` (`bigint unsigned`, FK $\rightarrow$ `users.id`, Cascade)
-- `nip` (`varchar(20)`, Unique, Index, Not Null)
-- `name` (`varchar(100)`, Not Null)
-- `keahlian` (`varchar(100)`)
-- `faculty` (`varchar(100)`)
-- `ai_constraints` (`text`, Nullable) - System guidelines loaded for the AI
-- `created_at`, `updated_at` (`datetime`)
-
-#### 4.3 Table: `students`
-Profile schema for supervised students:
-- `id` (`bigint unsigned`, PK, Auto Increment)
-- `user_id` (`bigint unsigned`, FK $\rightarrow$ `users.id`, Cascade)
-- `lecturer_id` (`bigint unsigned`, FK $\rightarrow$ `lecturers.id`, Restrict)
-- `nim` (`varchar(20)`, Unique, Index, Not Null)
-- `name` (`varchar(100)`, Not Null)
-- `prodi` (`varchar(100)`)
-- `thesis_title` (`text`)
-- `created_at`, `updated_at` (`datetime`)
-
-#### 4.4 Table: `consultation_logs`
-Supervision session logs:
-- `id` (`bigint unsigned`, PK, Auto Increment)
-- `student_id` (`bigint unsigned`, FK $\rightarrow$ `students.id`, Cascade, Index)
-- `audio_filename` (`varchar(255)`, Nullable)
-- `transcript_filename` (`varchar(255)`, Nullable)
-- `transcript_text` (`longtext`, Nullable)
-- `paper_filename` (`varchar(255)`, Nullable)
-- `final_document_filename` (`varchar(255)`, Nullable)
-- `final_document_uploaded_at` (`datetime`, Nullable)
-- `revised_document_filename` (`varchar(255)`, Nullable)
-- `revised_document_uploaded_at` (`datetime`, Nullable)
-- `created_at`, `updated_at` (`datetime`)
-
-#### 4.5 Table: `feedback_items`
-Revision tasks requested by lecturers:
-- `id` (`bigint unsigned`, PK, Auto Increment)
-- `log_id` (`bigint unsigned`, FK $\rightarrow$ `consultation_logs.id`, Cascade, Index)
-- `content` (`text`, Not Null)
-- `category` (`enum('Minor','Major')`, Not Null)
-- `status` (`enum('Fixed','Pending','Validated','Rejected')`, Default: `'Pending'`, Index)
-- `fix_proof_text` (`text`, Nullable) - Submitted by student during revision fix
-- `created_at`, `updated_at` (`datetime`)
-
-#### 4.6 Table: `direct_messages`
-Real-time messaging logs:
-- `id` (`bigint unsigned`, PK, Auto Increment)
-- `log_id` (`bigint unsigned`, FK $\rightarrow$ `consultation_logs.id`, Cascade, Index)
-- `sender_id` (`bigint unsigned`, FK $\rightarrow$ `users.id`, Cascade)
-- `sender_role` (`enum('student','lecturer')`, Not Null)
-- `content` (`text`, Not Null)
-- `created_at` (`datetime`)
+#### 3. `annotations`
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UINT | Primary Key, Auto Increment | Annotation item ID |
+| `consultation_id`| UINT | Foreign Key (`consultations.id`)| Parent consultation session |
+| `category` | VARCHAR(20) | Enum (`HOC`, `LOC`) | Academic severity classification |
+| `feedback_text` | TEXT | NOT NULL | Revision item detail |
+| `is_completed` | BOOLEAN | Default: `false` | Student completion checklist status |
 
 ---
 
-## 5. API & WebSocket Specifications (Contract Docs)
+## 5. API & WebSocket Contract Specifications
 
-### 5.1 Registration & Authentication
-#### **POST** `/auth/register`
-- **Body**:
-  ```json
-  {
-    "name": "Budi Mahasiswa",
-    "email": "student@university.ac.id",
-    "password": "securepassword",
-    "role": "student",
-    "nim": "2200010001",
-    "prodi": "Informatika",
-    "redeem_code": "LEC-CODE-12"
-  }
-  ```
-- **Response (`201 Created`)**:
-  ```json
-  {
-    "message": "User registered successfully",
-    "access_token": "eyJhbGciOi...",
-    "refresh_token": "d8a1f4...",
-    "user": { "id": 1, "name": "Budi Mahasiswa", "role": "student" }
-  }
-  ```
+### REST API Endpoints (Go Gateway: Port 8080)
 
-#### **POST** `/auth/login`
-- **Body**:
-  ```json
-  {
-    "email": "dosen@university.ac.id",
-    "password": "securepassword"
-  }
-  ```
-- **Response (`200 OK`)**:
-  ```json
-  {
-    "access_token": "eyJhbGciOi...",
-    "refresh_token": "d8a1f4...",
-    "user": {
-      "id": 2,
-      "name": "Dr. Dosen",
-      "role": "lecturer",
-      "lecturer": { "nip": "1980...", "ai_constraints": "" }
-    }
-  }
-  ```
+#### Authentication & Profile
+- `POST /api/v1/register` — Register new user account.
+- `POST /api/v1/login` — Authenticate and obtain JWT bearer token.
+- `GET /api/v1/profile` — Fetch current authenticated profile & API key configurations.
+- `PUT /api/v1/profile/keys` — Update encrypted provider API keys (`groq_key`, `nvidia_key`, etc.).
 
----
+#### Consultation Management
+- `GET /api/v1/consultations` — List consultations (filtered by user role).
+- `POST /api/v1/consultations` — Create consultation session (supports `multipart/form-form` with audio and document files).
+- `GET /api/v1/consultations/:id` — Retrieve consultation details, transcript, and AI revision checklist.
+- `DELETE /api/v1/consultations/:id` — Purge consultation session and clean up physical disk storage.
 
-### 5.2 Profile & Constraints Management
-#### **PATCH** `/settings/profile`
-- **Auth Required**: JWT Token
-- **Body (for Lecturer)**:
+#### AI Processing & Models
+- `GET /api/v1/ai/models` — Discover available models filtered by provider capability (`text` vs `vision`).
+- `POST /api/v1/ai/analyze` — Trigger manual re-analysis of consultation documents.
+
+### Realtime WebSocket Protocol
+- **Endpoint**: `ws://localhost:8080/ws`
+- **Handshake**: Connect with query token `ws://localhost:8080/ws?token=<JWT_TOKEN>`.
+- **Event Payload Structure**:
   ```json
   {
-    "name": "Dr. Dosen, M.T.",
-    "email": "dosen@university.ac.id",
-    "nip": "198001012005011001",
-    "faculty": "Informatika",
-    "keahlian": "Software Engineering",
-    "ai_constraints": "AI harus fokus menyarankan perbaikan metodologi dan menolak mengoreksi format dokumen."
-  }
-  ```
-- **Response (`200 OK`)**:
-  ```json
-  {
-    "message": "Profile updated successfully",
-    "user": {
-      "id": 2,
-      "name": "Dr. Dosen, M.T.",
-      "role": "lecturer",
-      "lecturer": {
-        "nip": "198001012005011001",
-        "faculty": "Informatika",
-        "keahlian": "Software Engineering",
-        "ai_constraints": "AI harus fokus menyarankan perbaikan metodologi..."
-      }
-    }
-  }
-  ```
-
----
-
-### 5.3 Consultation Log & Upload Workflow
-#### **POST** `/consultations`
-- **Auth Required**: Student Role
-- **Content-Type**: `multipart/form-data`
-- **Payload**:
-  - `audio` (Binary File, `.mp3`/`.wav`)
-  - `paper` (Binary File, `.docx`)
-- **Response (`201 Created`)**:
-  ```json
-  {
-    "message": "Consultation log and AI feedback created successfully",
+    "event": "CONSULTATION_UPDATED",
+    "room_id": "consultation_42",
     "data": {
-      "id": 12,
-      "student_id": 1,
-      "audio_filename": "177621_recording.mp3",
-      "transcript_text": "Metodologi menggunakan Agile, perbaiki diagram...",
-      "paper_filename": "177621_thesis.docx",
-      "feedback_items": [
-        { "id": 5, "content": "Perbaiki diagram Agile di Bab 3", "category": "Major", "status": "Pending" }
-      ]
+      "id": 42,
+      "status": "reviewed",
+      "updated_at": "2026-06-28T15:43:00Z"
     }
   }
   ```
 
 ---
 
-### 5.4 Real-time WebSocket Protocol
-Connections are established at `ws://localhost:8080/ws?token=<token>`.
+## 6. Installation & Environment Configuration
 
-#### 1. Subscribe to Room (Client-side)
-Clients are automatically pooled into a room based on the active consultation log id:
-```javascript
-// Connection payload triggers subscription
-socket.send(JSON.stringify({
-  action: "subscribe",
-  room: "consultation.12"
-}));
-```
+### Prerequisites
+- **Go**: Version 1.22 or higher
+- **PHP / Composer**: PHP 8.2+ and Composer 2.x
+- **Node.js**: Version 18+ and npm / pnpm
+- **MySQL**: Version 8.0+
 
-#### 2. Send Message Event (Bidirectional)
-Client sends a direct chat message to the room:
-```json
-{
-  "action": "send_message",
-  "room": "consultation.12",
-  "content": "Pak, saya sudah mengunggah revisi terbaru untuk diagram Bab 3."
-}
-```
-Go WebSocket server broadcasts the message object to all listening devices in the room:
-```json
-{
-  "event": "chat_message",
-  "data": {
-    "id": 104,
-    "log_id": 12,
-    "sender_id": 1,
-    "sender_role": "student",
-    "content": "Pak, saya sudah mengunggah revisi terbaru...",
-    "created_at": "2026-06-21T11:45:00Z"
-  }
-}
-```
+### Environment Files Setup
 
----
+1. **Go Backend Environment (`PopularProgramingFinalProject/.env`)**:
+   ```env
+   PORT=8080
+   DB_HOST=127.0.0.1
+   DB_PORT=3306
+   DB_USER=root
+   DB_PASSWORD=your_password
+   DB_NAME=tierlog_db
+   JWT_SECRET=your_super_secret_jwt_key_enterprise
+   
+   # Optional Fallback Keys
+   GROQ_API_KEY=gsk_your_groq_api_key_here
+   NVIDIA_API_KEY=nvapi_your_nvidia_api_key_here
+   ```
 
-## 6. Frontend Floating Window Workspace Engine
+2. **Laravel Frontend Environment (`PopularProgramingFinalProject/tierlog_web/.env`)**:
+   ```env
+   APP_NAME=TierLog
+   APP_ENV=local
+   APP_KEY=base64:generated_app_key_here
+   APP_URL=http://localhost:8000
+   
+   VITE_GO_BACKEND_URL=http://localhost:8080
+   VITE_WS_BACKEND_URL=ws://localhost:8080/ws
+   ```
 
-The portal at `/workspace` contains a draggable, resizable multi-window workspace. It uses pointer events for smooth dragging and resizing and manages window depths reactively.
+### Running Locally
 
-```
-┌───────────────────────────────── Workspace Canvas ────────────────────────────────┐
-│  [ Roster ]   [ History ]   [ Feedback ]   [ Chat ]   [ Queue ]     [ Tile Windows ]│
-├───────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                   │
-│  ┌── Student Roster ──┐          ┌────── Direct Chat ──────┐                      │
-│  │ 👤 Budi Mahasiswa  │          │ (Dosen) : Silakan       │                      │
-│  │ 👤 Ani Lestari     │          │ (Mhs)   : Baik Pak.     │                      │
-│  │                    │          │                         │                      │
-│  └────────────────────┘          │ ┌─────────────────────┐ │                      │
-│                                  │ │ Type a message...   │ │                      │
-│                                  │ └─────────────────────┘ │                      │
-│                                  └─────────────────────────┘                      │
-│                                                                                   │
-└───────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Dragging Mechanics (`WorkspaceWindow.vue`)
-The pointer position is bound dynamically relative to the sandbox canvas:
-```typescript
-function onHeaderPointerDown(e: PointerEvent) {
-  if ((e.target as HTMLElement).closest('.window-btn')) return;
-  emit('focus'); // Elevate z-index
-
-  isDragging.value = true;
-  startX = props.x;
-  startY = props.y;
-  startPageX = e.pageX;
-  startPageY = e.pageY;
-
-  (e.target as HTMLElement).setPointerCapture(e.pointerId);
-}
-
-function onHeaderPointerMove(e: PointerEvent) {
-  if (!isDragging.value) return;
-  const dx = e.pageX - startPageX;
-  const dy = e.pageY - startPageY;
-
-  // Enforce boundary logic
-  const newX = Math.max(0, startX + dx);
-  const newY = Math.max(0, startY + dy);
-
-  emit('update:position', { x: newX, y: newY });
-}
-```
+1. **Start MySQL Database**: Ensure MySQL is running and create database `tierlog_db`. Import schema from `PopularProgramingFinalProject/struct_go.sql`.
+2. **Start Go Backend**:
+   ```bash
+   cd PopularProgramingFinalProject
+   go run main.go
+   ```
+3. **Start Laravel Frontend**:
+   ```bash
+   cd PopularProgramingFinalProject/tierlog_web
+   composer install
+   npm install
+   npm run dev
+   php artisan serve --port=8000
+   ```
 
 ---
 
-## 7. Installation & Deployment Guide
+## 7. Production Deployment & Containerization
 
-Follow these steps to deploy TierLog for development or production environments:
+TierLog includes enterprise Docker configurations for unified containerized orchestration.
 
-### 7.1 Manual Local Setup
+### Deploying with Docker Compose
 
-#### Step 1: Backend Setup (Go)
-1.  Clone this repository.
-2.  Duplicate `.env.example` as `.env` in the root folder and configure:
-    ```env
-    DB_HOST=127.0.0.1
-    DB_PORT=3306
-    DB_DATABASE=struct_go
-    DB_USERNAME=root
-    DB_PASSWORD=
-    JWT_SECRET=your_super_secret_jwt_key
-    ```
-3.  Run Go build:
-    ```bash
-    go mod tidy
-    go run main.go
-    ```
-    *The Go API backend will start listening at `http://localhost:8080`.*
-
-#### Step 2: Frontend Setup (Laravel + Inertia)
-1.  Navigate to the web client folder:
-    ```bash
-    cd tierlog_web
-    ```
-2.  Install composer and npm dependencies:
-    ```bash
-    composer install
-    npm install
-    ```
-3.  Duplicate `.env.example` as `.env` and set SQLite database:
-    ```env
-    DB_CONNECTION=sqlite
-    VITE_API_URL=http://localhost:8080
-    ```
-4.  Initialize the SQLite database file:
-    ```bash
-    copy NUL database\database.sqlite   # On Windows CMD
-    # Or PowerShell: New-Item database/database.sqlite -ItemType File
-    php artisan migrate --force
-    ```
-5.  Launch development server and Vite assets bundler:
-    ```bash
-    npm run dev
-    # In another terminal tab:
-    php artisan serve --port=8000
-    ```
-    *Access the main page via `http://localhost:8000`.*
-
----
-
-## 7.2 Docker Deployment (Automated)
-
-The entire multi-container service (MySQL database, Go backend, and Laravel web client) can be run using Docker Compose.
+To deploy the entire multi-service stack (Go Backend + Laravel Web + MySQL DB):
 
 ```bash
-# Clone the repository
-git clone https://github.com/cruzhgggggg-coder/TIERLOG_FRONT_BACK_AI.git
-cd TIERLOG_FRONT_BACK_AI
-
-# Build and start services
-docker-compose up --build -d
+cd PopularProgramingFinalProject
+docker-compose up -d --build
 ```
 
-Docker Compose spins up the following services:
-- **`tierlog-db`** (Port `3306`): MySQL database running on `mysql:8.0`.
-- **`tierlog-go-api`** (Port `8080`): Compiles Go binary on `golang:alpine` and mounts storage volumes.
-- **`tierlog-laravel-web`** (Port `8001`): Compiles Node Vite assets dynamically passing `VITE_API_URL` as a build argument (`args`), configures PHP 8.4 Apache runtime, and deploys it on Port `8001`.
+The services will spin up automatically on the specified ports:
+- **Web Interface**: `http://localhost:8000`
+- **Go API Gateway**: `http://localhost:8080`
+- **MySQL Database**: `localhost:3306`
 
 ---
 
-## 8. Production Deployment & Scaling Guidelines
+## 8. Enterprise Security & Reliability Standard
 
-To scale the TierLog platform in production, consider the following recommendations:
-
-### 8.1 Reverse Proxy Setup (Nginx)
-Configure Nginx to act as a reverse proxy to route frontend page requests, API requests, and WebSocket connections safely under a single domain using TLS:
-
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name tierlog.university.ac.id;
-
-    ssl_certificate /etc/letsencrypt/live/tierlog/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/tierlog/privkey.pem;
-
-    # Frontend Assets and Laravel Server
-    location / {
-        proxy_pass http://127.0.0.1:8001;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # Go API Endpoints
-    location /api/ {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # WebSocket Upgrade Route
-    location /ws {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-}
-```
-
-### 8.2 Persistent Volumes for Media Storage
-Because consultation logs contain heavy media assets (voice recording `.mp3` files can be up to 50MB each), ensure the `/app/storage` folder is mounted on high-speed network storage (e.g., AWS EFS, Google Cloud Filestore, or standard block volumes) rather than temporary local container storage.
-
-### 8.3 Redis Integration for Real-time Scaling
-In a multi-instance container cluster, the default in-memory WebSocket Room Hub map (which tracks connections via Geth mutexes) must be scaled. Replace the memory map in `realtime/websocket.go` with a **Redis Pub/Sub adapter** to sync chat messages and status updates across multiple API containers.
+- **Encrypted Secrets at Rest**: User API keys are symmetrically encrypted before storage in MySQL using AES-GCM primitives (`utils/crypto.go`).
+- **Input Sanitization & MIME Guard**: Uploaded files are verified via magic-byte checking to prevent arbitrary executable execution.
+- **Circuit-Breaker Pattern for AI APIs**: External calls to Groq and NVIDIA NIM feature configurable timeouts and retry policies to prevent service hangs during API outages.
 
 ---
 
-*TierLog — Secure, fast, and intelligent supervision platform.*
+*© 2026 TierLog Platform Team. All Rights Reserved. Enterprise Academic Systems.*
